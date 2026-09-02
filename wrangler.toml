@@ -16,4 +16,4 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "tuktakmovies-db"
-database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+database_id = "06fe88a2-1631-4e99-b4e3-3a58c9c425e5"
