@@ -6,7 +6,7 @@ compatibility_date = "2026-01-01"
 # that the Worker code below does not explicitly handle (i.e. everything
 # except /api/*).
 [assets]
-directory = "./public"
+directory = "./Public"
 binding = "ASSETS"
 
 # Cloudflare D1 database — this is where every post you add from
