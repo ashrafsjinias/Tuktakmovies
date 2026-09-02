@@ -21,3 +21,6 @@ binding = "ASSETS"
 # binding = "DB"
 # database_name = "tuktakmovies-db"
 # database_id = "80b5691d-41da-457a-8f87-3ad8ca60c830"
+[observability]
+enabled = true
+head_sampling_rate = 1
