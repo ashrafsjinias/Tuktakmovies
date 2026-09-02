@@ -1,0 +1,23 @@
+name = "tuktakmovies"
+main = "worker/index.js"
+compatibility_date = "2026-01-01"
+
+# Serves everything in /public automatically for any request
+# that the Worker code below does not explicitly handle (i.e. everything
+# except /api/*).
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# NOTE: The D1 database binding is NOT declared here.
+# If you're deploying via the Cloudflare Dashboard + GitHub (no terminal),
+# add the D1 binding from: your Worker → Settings → Bindings → Add → D1 database
+# → variable name "DB" → select your database. See README.md for the full walkthrough.
+#
+# If you're deploying via the wrangler CLI instead, you can add this block
+# back in with your real database_id:
+#
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "tuktakmovies-db"
+# database_id = "your-database-id-here"
