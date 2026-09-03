@@ -22,6 +22,16 @@
 }
 .post-form textarea{resize:vertical;}
 .post-form .row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.field-block{margin-bottom:14px;}
+.field-block label{display:block;font-size:13.5px;font-weight:600;margin-bottom:8px;}
+.field-block input[type="file"]{
+  width:100%;padding:9px 10px;border:1px dashed var(--line);border-radius:7px;
+  font-family:var(--sans);font-size:13px;background:#fafbfc;
+}
+.upload-status{font-size:12.5px;color:var(--accent);min-height:16px;margin:6px 0 0;}
+.image-preview{display:flex;align-items:center;gap:12px;margin-top:10px;}
+.image-preview img{width:72px;height:96px;object-fit:cover;border-radius:7px;border:1px solid var(--line);}
+.image-preview #remove-image-btn{padding:8px 14px;font-size:13px;}
 .form-actions{display:flex;gap:10px;align-items:center;margin-top:6px;}
 
 .list-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;}
