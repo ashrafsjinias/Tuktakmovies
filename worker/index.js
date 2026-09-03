@@ -43,6 +43,28 @@ async function requireAuth(request, env) {
 }
 
 const ALLOWED_TYPES = ["featured", "review", "movie", "article", "trending"];
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
+
+function makeImageKey(filename) {
+  const extMatch = /\.([a-zA-Z0-9]+)$/.exec(filename || "");
+  const ext = (extMatch ? extMatch[1] : "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  return `${crypto.randomUUID()}.${ext}`;
+}
+
+// ---------- Serving uploaded images from R2 ----------
+
+async function handleImage(request, env, url) {
+  if (!env.IMAGES) return new Response("Image storage isn't set up.", { status: 404 });
+  const key = decodeURIComponent(url.pathname.replace(/^\/images\//, ""));
+  if (!key) return new Response("Not found", { status: 404 });
+  const object = await env.IMAGES.get(key);
+  if (!object) return new Response("Not found", { status: 404 });
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag);
+  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  return new Response(object.body, { headers });
+}
 
 // ---------- API ----------
 
@@ -78,6 +100,30 @@ async function handleApi(request, env, url) {
   if (pathname === "/api/me" && request.method === "GET") {
     const ok = await requireAuth(request, env);
     return json({ authenticated: ok });
+  }
+
+  // -- image upload --
+  if (pathname === "/api/upload" && request.method === "POST") {
+    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
+    if (!env.IMAGES) {
+      return json({ error: "Image storage (R2) isn't set up yet. See README.md." }, { status: 500 });
+    }
+    const form = await request.formData().catch(() => null);
+    const file = form ? form.get("file") : null;
+    if (!file || typeof file === "string") {
+      return json({ error: "No file received." }, { status: 400 });
+    }
+    if (!file.type || !file.type.startsWith("image/")) {
+      return json({ error: "Only image files are allowed." }, { status: 400 });
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return json({ error: "Image is larger than 5MB." }, { status: 400 });
+    }
+    const key = makeImageKey(file.name);
+    await env.IMAGES.put(key, await file.arrayBuffer(), {
+      httpMetadata: { contentType: file.type },
+    });
+    return json({ url: `/images/${key}` });
   }
 
   // -- posts --
@@ -159,6 +205,9 @@ export default {
       } catch (err) {
         return json({ error: String(err) }, { status: 500 });
       }
+    }
+    if (url.pathname.startsWith("/images/")) {
+      return handleImage(request, env, url);
     }
     return env.ASSETS.fetch(request);
   },
