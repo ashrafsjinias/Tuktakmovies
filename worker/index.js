@@ -66,6 +66,87 @@ async function handleImage(request, env, url) {
   return new Response(object.body, { headers });
 }
 
+// ---------- TMDB auto-import (runs on a Cron Trigger) ----------
+
+const TMDB_IMPORT_LIMIT = 5; // how many new movies to add per run
+const TMDB_POST_TYPE = "movie"; // which section these land in: "movie", "trending", or "review"
+
+function formatPostDate(d) {
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+async function importTrendingFromTMDB(env) {
+  if (!env.TMDB_API_KEY) {
+    console.log("TMDB_API_KEY not set — skipping scheduled import.");
+    return;
+  }
+  if (!env.DB) {
+    console.log("D1 (DB) not bound — skipping scheduled import.");
+    return;
+  }
+
+  const listRes = await fetch(
+    `https://api.themoviedb.org/3/trending/movie/day?api_key=${env.TMDB_API_KEY}`
+  );
+  if (!listRes.ok) {
+    console.log("TMDB trending fetch failed:", listRes.status);
+    return;
+  }
+  const listData = await listRes.json();
+  const movies = (listData.results || []).slice(0, TMDB_IMPORT_LIMIT * 3); // headroom for skips
+
+  let imported = 0;
+  for (const movie of movies) {
+    if (imported >= TMDB_IMPORT_LIMIT) break;
+
+    const existing = await env.DB.prepare("SELECT id FROM posts WHERE tmdb_id = ?")
+      .bind(movie.id)
+      .first();
+    if (existing) continue; // already imported before
+
+    let imageUrl = null;
+    if (movie.poster_path && env.IMAGES) {
+      try {
+        const posterRes = await fetch(`https://image.tmdb.org/t/p/w500${movie.poster_path}`);
+        if (posterRes.ok) {
+          const key = `tmdb-${movie.id}.jpg`;
+          await env.IMAGES.put(key, await posterRes.arrayBuffer(), {
+            httpMetadata: { contentType: posterRes.headers.get("Content-Type") || "image/jpeg" },
+          });
+          imageUrl = `/images/${key}`;
+        }
+      } catch (err) {
+        console.log("Poster fetch failed for", movie.id, err);
+      }
+    }
+
+    const year = movie.release_date ? Number(movie.release_date.slice(0, 4)) : null;
+    const rating = typeof movie.vote_average === "number" ? Math.round(movie.vote_average * 10) / 10 : null;
+    const excerpt = (movie.overview || "").slice(0, 300);
+
+    await env.DB.prepare(
+      `INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      TMDB_POST_TYPE,
+      movie.title || movie.original_title || "Untitled",
+      excerpt,
+      imageUrl,
+      rating,
+      rating,
+      year,
+      formatPostDate(new Date()),
+      0,
+      `https://www.themoviedb.org/movie/${movie.id}`,
+      movie.id
+    ).run();
+
+    imported++;
+  }
+
+  console.log(`TMDB import finished: ${imported} new post(s) added.`);
+}
+
 // ---------- API ----------
 
 async function handleApi(request, env, url) {
@@ -124,6 +205,13 @@ async function handleApi(request, env, url) {
       httpMetadata: { contentType: file.type },
     });
     return json({ url: `/images/${key}` });
+  }
+
+  // -- manual trigger for testing the TMDB import (admin only) --
+  if (pathname === "/api/import-tmdb" && request.method === "POST") {
+    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
+    await importTrendingFromTMDB(env);
+    return json({ ok: true });
   }
 
   // -- posts --
@@ -210,5 +298,9 @@ export default {
       return handleImage(request, env, url);
     }
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(importTrendingFromTMDB(env));
   },
 };
