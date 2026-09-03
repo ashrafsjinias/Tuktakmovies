@@ -1,564 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
-  <title>Admin — TukTakMovies</title>
-
-  <meta name="robots" content="noindex, nofollow">
-
-  <link
-    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
-    rel="stylesheet"
-  >
-
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/admin.css">
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — TukTakMovies</title>
+<meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/admin.css">
 </head>
-
 <body class="admin-body">
 
-
-  <!-- =========================
-       LOGIN SCREEN
-  ========================== -->
-
-  <div id="login-view" class="admin-center">
-
-    <form id="login-form" class="admin-card">
-
-      <h1>🎬 TukTakMovies Admin</h1>
-
-      <p class="muted">
-        Log in to add or edit posts.
-      </p>
-
-      <label>
-        Password
-
-        <input
-          type="password"
-          id="login-password"
-          required
-          autofocus
-        >
-
-      </label>
-
-      <button
-        type="submit"
-        class="btn btn-primary full"
-      >
-        Log In
-      </button>
-
-      <p
-        class="error"
-        id="login-error"
-      ></p>
-
-    </form>
-
-  </div>
-
-
-  <!-- =========================
-       ADMIN DASHBOARD
-  ========================== -->
-
-  <div
-    id="dashboard-view"
-    class="admin-wrap"
-    hidden
-  >
-
-    <!-- HEADER -->
-
-    <header class="admin-header">
-
-      <a
-        href="index.html"
-        class="logo"
-      >
-
-        <span class="logo-mark">
-          🎬
-        </span>
-
-        <span class="logo-text">
-
-          TUKTAK<strong>MOVIES</strong>
-
-          <small>ADMIN</small>
-
-        </span>
-
-      </a>
-
-
-      <button
-        id="logout-btn"
-        class="btn btn-ghost"
-      >
-        Log Out
-      </button>
-
-    </header>
-
-
-
-    <!-- MAIN CONTENT -->
-
-    <main class="admin-main">
-
-
-      <!-- =========================
-           ADD / EDIT POST
-      ========================== -->
-
-      <section class="admin-card">
-
-        <h2 id="form-title">
-          Add a New Post
-        </h2>
-
-
-        <form
-          id="post-form"
-          class="post-form"
-        >
-
-
-          <!-- POST ID -->
-
-          <input
-            type="hidden"
-            id="post-id"
-          >
-
-
-
-          <!-- POST TYPE -->
-
-          <label>
-
-            Post type
-
-            <select
-              id="post-type"
-              required
-            >
-
-              <option value="featured">
-                Featured (hero banner)
-              </option>
-
-              <option
-                value="review"
-                selected
-              >
-                Movie Review
-              </option>
-
-              <option value="movie">
-                Movie (Latest Movies grid)
-              </option>
-
-              <option value="article">
-                Article
-              </option>
-
-              <option value="trending">
-                Trending Now
-              </option>
-
-            </select>
-
-          </label>
-
-
-
-          <!-- TITLE -->
-
-          <label>
-
-            Title
-
-            <input
-              type="text"
-              id="post-title"
-              required
-              placeholder="e.g. Skyline Protocol"
-            >
-
-          </label>
-
-
-
-          <!-- EXCERPT -->
-
-          <label>
-
-            Excerpt / short description
-
-            <span class="muted">
-              (used for Featured &amp; Articles)
-            </span>
-
-            <textarea
-              id="post-excerpt"
-              rows="2"
-              placeholder="One or two sentences"
-            ></textarea>
-
-          </label>
-
-
-
-          <!-- =========================
-               IMAGE URL
-          ========================== -->
-
-          <label>
-
-            Image URL
-
-            <span class="muted">
-              (paste an image URL or upload below)
-            </span>
-
-            <input
-              type="url"
-              id="post-image"
-              placeholder="https://..."
-            >
-
-          </label>
-
-
-
-          <!-- =========================
-               IMAGE FILE UPLOAD
-               REQUIRED BY admin.js
-          ========================== -->
-
-          <label>
-
-            Upload Image
-
-            <input
-              type="file"
-              id="post-image-file"
-              accept="image/*"
-            >
-
-          </label>
-
-
-          <!-- UPLOAD STATUS -->
-
-          <p
-            id="upload-status"
-            class="muted"
-          ></p>
-
-
-
-          <!-- IMAGE PREVIEW -->
-
-          <div
-            id="image-preview"
-            hidden
-          >
-
-            <img
-              id="image-preview-img"
-              src=""
-              alt="Image Preview"
-            >
-
-            <button
-              type="button"
-              id="remove-image-btn"
-              class="btn btn-ghost"
-            >
-              Remove Image
-            </button>
-
-          </div>
-
-
-
-          <!-- =========================
-               SCORE / RATING / YEAR
-          ========================== -->
-
-          <div class="row">
-
-
-            <!-- REVIEW SCORE -->
-
-            <label>
-
-              Review score
-
-              <span class="muted">
-                (0–10, for Reviews)
-              </span>
-
-              <input
-                type="number"
-                id="post-score"
-                step="0.1"
-                min="0"
-                max="10"
-              >
-
-            </label>
-
-
-
-            <!-- RATING -->
-
-            <label>
-
-              Rating
-
-              <span class="muted">
-                (0–10, for Movies/Featured)
-              </span>
-
-              <input
-                type="number"
-                id="post-rating"
-                step="0.1"
-                min="0"
-                max="10"
-              >
-
-            </label>
-
-
-
-            <!-- YEAR -->
-
-            <label>
-
-              Year
-
-              <span class="muted">
-                (for Movies)
-              </span>
-
-              <input
-                type="number"
-                id="post-year"
-                min="1900"
-                max="2100"
-              >
-
-            </label>
-
-
-          </div>
-
-
-
-          <!-- =========================
-               DATE / COMMENTS
-          ========================== -->
-
-          <div class="row">
-
-
-            <!-- DATE -->
-
-            <label>
-
-              Date shown on card
-
-              <input
-                type="text"
-                id="post-date"
-                placeholder="e.g. May 23, 2025"
-              >
-
-            </label>
-
-
-
-            <!-- COMMENTS -->
-
-            <label>
-
-              Comment count
-
-              <input
-                type="number"
-                id="post-comments"
-                min="0"
-                value="0"
-              >
-
-            </label>
-
-
-          </div>
-
-
-
-          <!-- =========================
-               POST LINK
-          ========================== -->
-
-          <label>
-
-            Link
-
-            <span class="muted">
-              (where "Read Review" / the card should point to)
-            </span>
-
-            <input
-              type="url"
-              id="post-link"
-              placeholder="https://..."
-            >
-
-          </label>
-
-
-
-          <!-- =========================
-               FORM BUTTONS
-          ========================== -->
-
-          <div class="form-actions">
-
-
-            <button
-              type="submit"
-              class="btn btn-primary"
-            >
-              Save Post
-            </button>
-
-
-
-            <button
-              type="button"
-              id="cancel-edit"
-              class="btn btn-ghost"
-              hidden
-            >
-              Cancel edit
-            </button>
-
-
-          </div>
-
-
-
-          <!-- FORM ERROR -->
-
-          <p
-            class="error"
-            id="form-error"
-          ></p>
-
-
-        </form>
-
-      </section>
-
-
-
-      <!-- =========================
-           EXISTING POSTS
-      ========================== -->
-
-      <section class="admin-card">
-
-
-        <div class="list-head">
-
-
-          <h2>
-            Existing Posts
-          </h2>
-
-
-
-          <select id="filter-type">
-
-
-            <option value="">
-              All types
-            </option>
-
-
-            <option value="featured">
-              Featured
-            </option>
-
-
-            <option value="review">
-              Reviews
-            </option>
-
-
-            <option value="movie">
-              Movies
-            </option>
-
-
-            <option value="article">
-              Articles
-            </option>
-
-
-            <option value="trending">
-              Trending
-            </option>
-
-
+<!-- Login screen -->
+<div id="login-view" class="admin-center">
+  <form id="login-form" class="admin-card">
+    <h1>🎬 TukTakMovies Admin</h1>
+    <p class="muted">Log in to add or edit posts.</p>
+    <label>Password
+      <input type="password" id="login-password" required autofocus>
+    </label>
+    <button type="submit" class="btn btn-primary full">Log In</button>
+    <p class="error" id="login-error"></p>
+  </form>
+</div>
+
+<!-- Dashboard (hidden until logged in) -->
+<div id="dashboard-view" class="admin-wrap" hidden>
+  <header class="admin-header">
+    <a href="index.html" class="logo"><span class="logo-mark">🎬</span><span class="logo-text">TUKTAK<strong>MOVIES</strong><small>ADMIN</small></span></a>
+    <button id="logout-btn" class="btn btn-ghost">Log Out</button>
+  </header>
+
+  <main class="admin-main">
+    <section class="admin-card">
+      <h2 id="form-title">Add a New Post</h2>
+      <form id="post-form" class="post-form">
+        <input type="hidden" id="post-id">
+
+        <label>Post type
+          <select id="post-type" required>
+            <option value="featured">Featured (hero banner)</option>
+            <option value="review" selected>Movie Review</option>
+            <option value="movie">Movie (Latest Movies grid)</option>
+            <option value="article">Article</option>
+            <option value="trending">Trending Now</option>
           </select>
+        </label>
 
+        <label>Title
+          <input type="text" id="post-title" required placeholder="e.g. Skyline Protocol">
+        </label>
 
+        <label>Excerpt / short description <span class="muted">(used for Featured &amp; Articles)</span>
+          <textarea id="post-excerpt" rows="2" placeholder="One or two sentences"></textarea>
+        </label>
+
+        <div class="field-block">
+          <label for="post-image-file">মুভি পোস্টার / ছবি <span class="muted">(ঐচ্ছিক — না দিলে একটা প্লেসহোল্ডার দেখাবে)</span></label>
+          <input type="file" id="post-image-file" accept="image/*">
+          <p class="upload-status" id="upload-status"></p>
+          <div class="image-preview" id="image-preview" hidden>
+            <img id="image-preview-img" alt="preview">
+            <button type="button" id="remove-image-btn" class="btn-ghost">ছবি সরান</button>
+          </div>
+          <input type="hidden" id="post-image">
         </div>
 
+        <div class="row">
+          <label>Review score <span class="muted">(0–10, for Reviews)</span>
+            <input type="number" id="post-score" step="0.1" min="0" max="10">
+          </label>
+          <label>Rating <span class="muted">(0–10, for Movies/Featured)</span>
+            <input type="number" id="post-rating" step="0.1" min="0" max="10">
+          </label>
+          <label>Year <span class="muted">(for Movies)</span>
+            <input type="number" id="post-year" min="1900" max="2100">
+          </label>
+        </div>
 
+        <div class="row">
+          <label>Date shown on card
+            <input type="text" id="post-date" placeholder="e.g. May 23, 2025">
+          </label>
+          <label>Comment count
+            <input type="number" id="post-comments" min="0" value="0">
+          </label>
+        </div>
 
-        <!-- POST LIST -->
+        <label>Link <span class="muted">(where "Read Review" / the card should point to)</span>
+          <input type="url" id="post-link" placeholder="https://…">
+        </label>
 
-        <div
-          id="post-list"
-          class="post-list"
-        ></div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save Post</button>
+          <button type="button" id="cancel-edit" class="btn btn-ghost" hidden>Cancel edit</button>
+        </div>
+        <p class="error" id="form-error"></p>
+      </form>
+    </section>
 
+    <section class="admin-card">
+      <div class="list-head">
+        <h2>Existing Posts</h2>
+        <select id="filter-type">
+          <option value="">All types</option>
+          <option value="featured">Featured</option>
+          <option value="review">Reviews</option>
+          <option value="movie">Movies</option>
+          <option value="article">Articles</option>
+          <option value="trending">Trending</option>
+        </select>
+      </div>
+      <div id="post-list" class="post-list"></div>
+    </section>
+  </main>
+</div>
 
-      </section>
-
-
-    </main>
-
-
-  </div>
-
-
-
-  <!-- =========================
-       JAVASCRIPT
-  ========================== -->
-
-  <script src="js/admin.js"></script>
-
-
+<script src="js/admin.js"></script>
 </body>
 </html>
