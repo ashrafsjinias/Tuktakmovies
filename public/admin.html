@@ -28,8 +28,12 @@
 <div id="dashboard-view" class="admin-wrap" hidden>
   <header class="admin-header">
     <a href="index.html" class="logo"><span class="logo-mark">🎬</span><span class="logo-text">TUKTAK<strong>MOVIES</strong><small>ADMIN</small></span></a>
-    <button id="logout-btn" class="btn btn-ghost">Log Out</button>
+    <div style="display:flex;gap:8px;">
+      <button id="sync-tmdb-btn" class="btn btn-ghost">Sync from TMDB now</button>
+      <button id="logout-btn" class="btn btn-ghost">Log Out</button>
+    </div>
   </header>
+  <p class="muted" id="sync-status" style="text-align:right;margin:0 4px 10px;"></p>
 
   <main class="admin-main">
     <section class="admin-card">
