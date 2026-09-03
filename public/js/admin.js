@@ -25,6 +25,50 @@ const fields = {
   link: document.getElementById("post-link"),
 };
 
+const imageFileInput = document.getElementById("post-image-file");
+const uploadStatus = document.getElementById("upload-status");
+const imagePreview = document.getElementById("image-preview");
+const imagePreviewImg = document.getElementById("image-preview-img");
+const removeImageBtn = document.getElementById("remove-image-btn");
+
+function showImagePreview(url) {
+  if (!url) {
+    imagePreview.hidden = true;
+    imagePreviewImg.removeAttribute("src");
+    return;
+  }
+  imagePreviewImg.src = url;
+  imagePreview.hidden = false;
+}
+
+imageFileInput.addEventListener("change", async () => {
+  const file = imageFileInput.files[0];
+  if (!file) return;
+  uploadStatus.textContent = "Uploading…";
+  const body = new FormData();
+  body.append("file", file);
+  try {
+    const res = await fetch("/api/upload", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) {
+      uploadStatus.textContent = data.error || "Upload failed.";
+      return;
+    }
+    fields.image.value = data.url;
+    showImagePreview(data.url);
+    uploadStatus.textContent = "Uploaded ✓";
+  } catch {
+    uploadStatus.textContent = "Could not reach the server.";
+  }
+});
+
+removeImageBtn.addEventListener("click", () => {
+  fields.image.value = "";
+  imageFileInput.value = "";
+  uploadStatus.textContent = "";
+  showImagePreview("");
+});
+
 function showDashboard() {
   loginView.hidden = true;
   dashboardView.hidden = false;
@@ -81,6 +125,9 @@ function resetForm() {
   formTitle.textContent = "Add a New Post";
   cancelEditBtn.hidden = true;
   formError.textContent = "";
+  imageFileInput.value = "";
+  uploadStatus.textContent = "";
+  showImagePreview("");
 }
 
 cancelEditBtn.addEventListener("click", resetForm);
@@ -155,6 +202,9 @@ function renderPostRow(post) {
     fields.post_date.value = post.post_date || "";
     fields.comments.value = post.comments ?? 0;
     fields.link.value = post.link || "";
+    imageFileInput.value = "";
+    uploadStatus.textContent = "";
+    showImagePreview(post.image || "");
     formTitle.textContent = `Editing: ${post.title}`;
     cancelEditBtn.hidden = false;
     window.scrollTo({ top: 0, behavior: "smooth" });
