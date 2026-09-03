@@ -116,7 +116,26 @@ logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" });
   showLogin();
 });
-
+const syncTmdbBtn = document.getElementById("sync-tmdb-btn");
+const syncStatus = document.getElementById("sync-status");
+syncTmdbBtn.addEventListener("click", async () => {
+  syncStatus.textContent = "Syncing… this can take a few seconds";
+  syncTmdbBtn.disabled = true;
+  try {
+    const res = await fetch("/api/import-tmdb", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      syncStatus.textContent = data.error || "Sync failed.";
+    } else {
+      syncStatus.textContent = "Done ✓ — check the list below.";
+      loadPosts();
+    }
+  } catch {
+    syncStatus.textContent = "Could not reach the server.";
+  } finally {
+    syncTmdbBtn.disabled = false;
+  }
+});
 function resetForm() {
   postForm.reset();
   fields.id.value = "";
