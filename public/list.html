@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="css/style.css">
 <style>
   .list-page{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
-  .list-page h1{font-family:var(--serif);font-size:clamp(24px,3vw,32px);margin:0 0 26px;}
+  .list-page h1{font-family:var(--serif);fontnewze:clamp(24px,3vw,32px);margin:0 0 26px;}
   .list-empty{color:var(--ink-soft);padding:40px 0;text-align:center;}
 </style>
 </head>
@@ -16,7 +16,7 @@
 
 <header class="site-header">
   <div class="container header-inner">
-    <a href="index.html" class="logo">
+    <a href="/" class="logo">
       <span class="logo-mark">🎬</span>
       <span class="logo-text">TUKTAK<strong>MOVIES</strong>
         <small>MOVIE NEWS, REVIEWS &amp; MORE</small>
@@ -56,7 +56,7 @@
         return;
       }
       grid.innerHTML = posts.map(p => `
-        <a class="card" href="post.html?id=${p.id}">
+        <a class="card" href="/movie/${p.id}">
           ${thumbHtmlForList(p)}
           <div class="body">
             <h3>${p.title}</h3>
