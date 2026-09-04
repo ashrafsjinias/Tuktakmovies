@@ -23,6 +23,13 @@ const fields = {
   post_date: document.getElementById("post-date"),
   comments: document.getElementById("post-comments"),
   link: document.getElementById("post-link"),
+  genres: document.getElementById("post-genres"),
+  tagline: document.getElementById("post-tagline"),
+  runtime: document.getElementById("post-runtime"),
+  trailer_key: document.getElementById("post-trailer"),
+  cast_names: document.getElementById("post-cast"),
+  watch_providers: document.getElementById("post-watch-providers"),
+  watch_link: document.getElementById("post-watch-link"),
 };
 
 const imageFileInput = document.getElementById("post-image-file");
@@ -116,6 +123,7 @@ logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" });
   showLogin();
 });
+
 const syncTmdbBtn = document.getElementById("sync-tmdb-btn");
 const syncStatus = document.getElementById("sync-status");
 syncTmdbBtn.addEventListener("click", async () => {
@@ -136,6 +144,7 @@ syncTmdbBtn.addEventListener("click", async () => {
     syncTmdbBtn.disabled = false;
   }
 });
+
 function resetForm() {
   postForm.reset();
   fields.id.value = "";
@@ -166,6 +175,13 @@ postForm.addEventListener("submit", async (e) => {
     post_date: fields.post_date.value.trim(),
     comments: fields.comments.value === "" ? 0 : Number(fields.comments.value),
     link: fields.link.value.trim(),
+    genres: fields.genres.value.trim(),
+    tagline: fields.tagline.value.trim(),
+    runtime: fields.runtime.value === "" ? null : Number(fields.runtime.value),
+    trailer_key: fields.trailer_key.value.trim(),
+    cast_names: fields.cast_names.value.trim(),
+    watch_providers: fields.watch_providers.value.trim(),
+    watch_link: fields.watch_link.value.trim(),
   };
 
   const id = fields.id.value;
@@ -221,6 +237,13 @@ function renderPostRow(post) {
     fields.post_date.value = post.post_date || "";
     fields.comments.value = post.comments ?? 0;
     fields.link.value = post.link || "";
+    fields.genres.value = post.genres || "";
+    fields.tagline.value = post.tagline || "";
+    fields.runtime.value = post.runtime ?? "";
+    fields.trailer_key.value = post.trailer_key || "";
+    fields.cast_names.value = post.cast_names || "";
+    fields.watch_providers.value = post.watch_providers || "";
+    fields.watch_link.value = post.watch_link || "";
     imageFileInput.value = "";
     uploadStatus.textContent = "";
     showImagePreview(post.image || "");
