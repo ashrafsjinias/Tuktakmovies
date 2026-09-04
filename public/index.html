@@ -6,7 +6,7 @@
 <title>TukTakMovies — Movie News, Reviews & More</title>
 <meta name="description" content="Latest movie news, reviews, ratings and everything about the world of cinema.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Source+Serif+4:opsecrett@8..60,400;8..60,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -15,10 +15,10 @@
 <div class="topbar">
   <div class="container topbar-inner">
     <div class="topbar-links">
-      <a href="about.html">About Us</a>
-      <a href="contact.html">Contact</a>
-      <a href="privacy-policy.html">Privacy Policy</a>
-      <a href="write-for-us.html">Write For Us</a>
+      <a href="/about">About Us</a>
+      <a href="/contact">Contact</a>
+      <a href="/privacy-policy">Privacy Policy</a>
+      <a href="/write-for-us">Write For Us</a>
     </div>
     <div class="topbar-right">
       <span id="today-date"></span>
@@ -34,7 +34,7 @@
 <!-- Header -->
 <header class="site-header">
   <div class="container header-inner">
-    <a href="index.html" class="logo">
+    <a href="/" class="logo">
       <span class="logo-mark">🎬</span>
       <span class="logo-text">TUKTAK<strong>MOVIES</strong>
         <small>MOVIE NEWS, REVIEWS &amp; MORE</small>
@@ -46,21 +46,21 @@
       <div class="dropdown">
         <a href="#movies">Movies ▾</a>
         <div class="dropdown-menu">
-          <a href="coming-soon.html?section=Action">Action</a>
-          <a href="coming-soon.html?section=Drama">Drama</a>
-          <a href="coming-soon.html?section=Sci-Fi">Sci-Fi</a>
-          <a href="coming-soon.html?section=Horror">Horror</a>
+          <a href="/genre/action">Action</a>
+          <a href="/genre/drama">Drama</a>
+          <a href="/genre/sci-fi">Sci-Fi</a>
+          <a href="/genre/horror">Horror</a>
         </div>
       </div>
       <a href="#reviews">Reviews</a>
-      <a href="coming-soon.html?section=TV%20Shows">TV Shows</a>
-      <a href="coming-soon.html?section=Celebrities">Celebrities</a>
+      <a href="/tv-shows">TV Shows</a>
+      <a href="/celebrities">Celebrities</a>
       <div class="dropdown">
         <a href="#articles">Articles ▾</a>
         <div class="dropdown-menu">
-          <a href="coming-soon.html?section=Top%20Lists">Top Lists</a>
-          <a href="coming-soon.html?section=Explainers">Explainers</a>
-          <a href="coming-soon.html?section=Industry%20News">Industry News</a>
+          <a href="/top-lists">Top Lists</a>
+          <a href="/explainers">Explainers</a>
+          <a href="/industry-news">Industry News</a>
         </div>
       </div>
     </nav>
@@ -72,7 +72,9 @@
   </div>
   <div class="search-panel" id="search-panel">
     <div class="container">
-      <input type="text" placeholder="Search movies, reviews, articles…">
+      <form id="header-search-form" action="/search" method="get">
+        <input type="text" name="q" placeholder="Search movies, reviews, articles…">
+      </form>
     </div>
   </div>
 </header>
@@ -104,7 +106,7 @@
     <section class="block" id="reviews">
       <div class="block-head">
         <h2><span class="bar"></span> Latest Movie Reviews</h2>
-        <a href="list.html?type=review" class="view-all">View All →</a>
+        <a href="/reviews" class="view-all">View All →</a>
       </div>
       <div class="grid grid-4" id="reviews-grid"></div>
     </section>
@@ -113,7 +115,7 @@
     <section class="block" id="movies">
       <div class="block-head">
         <h2><span class="bar"></span> Latest Movies</h2>
-        <a href="list.html?type=movie" class="view-all">View All →</a>
+        <a href="/movies" class="view-all">View All →</a>
       </div>
       <div class="grid grid-6" id="movies-grid"></div>
     </section>
@@ -122,7 +124,7 @@
     <section class="block" id="articles">
       <div class="block-head">
         <h2><span class="bar"></span> Popular Articles</h2>
-        <a href="list.html?type=article" class="view-all">View All →</a>
+        <a href="/articles" class="view-all">View All →</a>
       </div>
       <div class="grid grid-4" id="articles-grid"></div>
     </section>
@@ -174,7 +176,7 @@
 <footer class="site-footer">
   <div class="container footer-grid">
     <div class="footer-brand">
-      <a href="index.html" class="logo">
+      <a href="/" class="logo">
         <span class="logo-mark">🎬</span>
         <span class="logo-text">TUKTAK<strong>MOVIES</strong></span>
       </a>
@@ -185,15 +187,15 @@
     </div>
     <div class="footer-col">
       <h4>Quick Links</h4>
-      <a href="index.html">Home</a><a href="list.html?type=movie">Movies</a><a href="list.html?type=review">Reviews</a><a href="coming-soon.html?section=TV%20Shows">TV Shows</a><a href="list.html?type=article">Articles</a><a href="contact.html">Contact Us</a>
+      <a href="/">Home</a><a href="/movies">Movies</a><a href="/reviews">Reviews</a><a href="/tv-shows">TV Shows</a><a href="/articles">Articles</a><a href="/contact">Contact Us</a>
     </div>
     <div class="footer-col">
       <h4>Categories</h4>
-      <a href="coming-soon.html?section=Action">Action</a><a href="coming-soon.html?section=Adventure">Adventure</a><a href="coming-soon.html?section=Comedy">Comedy</a><a href="coming-soon.html?section=Drama">Drama</a><a href="coming-soon.html?section=Horror">Horror</a><a href="coming-soon.html?section=Sci-Fi">Sci-Fi</a>
+      <a href="/genre/action">Action</a><a href="/genre/adventure">Adventure</a><a href="/genre/comedy">Comedy</a><a href="/genre/drama">Drama</a><a href="/genre/horror">Horror</a><a href="/genre/sci-fi">Sci-Fi</a>
     </div>
     <div class="footer-col">
       <h4>Legal</h4>
-      <a href="terms.html">Terms of Use</a><a href="privacy-policy.html">Privacy Policy</a><a href="disclaimer.html">Disclaimer</a><a href="dmca.html">DMCA</a><a href="sitemap.html">Sitemap</a>
+      <a href="/terms">Terms of Use</a><a href="/privacy-policy">Privacy Policy</a><a href="/disclaimer">Disclaimer</a><a href="/dmca">DMCA</a><a href="/sitemap">Sitemap</a>
     </div>
     <div class="footer-col">
       <h4>Popular Tags</h4>
@@ -203,7 +205,7 @@
     </div>
   </div>
   <div class="footer-bottom">
-    <div class="container">© <span id="year"></span> TukTakMovies. All Rights Reserved. · <a href="/admin.html" style="color:#8ea0c9;">Admin</a><br>
+    <div class="container">© <span id="year"></span> TukTakMovies. All Rights Reserved. · <a href="/admin" style="color:#8ea0c9;">Admin</a><br>
     <span style="font-size:11px;opacity:.7;">This product uses the TMDB API but is not endorsed or certified by TMDB.</span></div>
   </div>
 </footer>
