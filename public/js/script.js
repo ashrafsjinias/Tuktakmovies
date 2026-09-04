@@ -59,53 +59,58 @@ function thumbHtml(post, scoreBadge) {
   return `<div class="thumb">${img}${badge}</div>`;
 }
 
+// Wraps a card's inner HTML in a link to post.html?id=... when the post has
+// a real database id (demo/fallback posts have no id, so they stay static).
+function cardWrap(post, innerHtml) {
+  return post.id
+    ? `<a class="card" href="post.html?id=${post.id}">${innerHtml}</a>`
+    : `<article class="card">${innerHtml}</article>`;
+}
+
 function renderReviews(items) {
   const el = document.getElementById("reviews-grid");
-  el.innerHTML = items.map(r => `
-    <article class="card">
+  el.innerHTML = items.map(r => cardWrap(r, `
       ${thumbHtml(r, true)}
       <div class="body">
         <h3>${r.title}</h3>
         <div class="sub"><span>📅 ${r.post_date || ""}</span><span>💬 ${r.comments || 0}</span></div>
-      </div>
-    </article>`).join("");
+      </div>`)).join("");
 }
 
 function renderMovies(items) {
   const el = document.getElementById("movies-grid");
-  el.innerHTML = items.map(m => `
-    <article class="card">
+  el.innerHTML = items.map(m => cardWrap(m, `
       ${thumbHtml(m, false)}
       <div class="body">
         <h3>${m.title}</h3>
         <div class="sub"><span>${m.year || ""}</span><span class="stars">⭐ ${m.rating ?? "—"}</span></div>
-      </div>
-    </article>`).join("");
+      </div>`)).join("");
 }
 
 function renderArticles(items) {
   const el = document.getElementById("articles-grid");
-  el.innerHTML = items.map(a => `
-    <article class="card">
+  el.innerHTML = items.map(a => cardWrap(a, `
       ${thumbHtml(a, false)}
       <div class="body">
         <h3>${a.title}</h3>
         <div class="sub"><span>📅 ${a.post_date || ""}</span><span>💬 ${a.comments || 0}</span></div>
-      </div>
-    </article>`).join("");
+      </div>`)).join("");
 }
 
 function renderTrending(items) {
   const el = document.getElementById("trending-list");
-  el.innerHTML = items.map((t, i) => `
-    <li>
+  el.innerHTML = items.map((t, i) => {
+    const inner = `
       <span class="num">${i + 1}</span>
       <div class="thumb" style="width:52px;height:52px;">${t.image ? `<img src="${t.image}" alt="${t.title}" loading="lazy">` : `<div class="no-image" style="font-size:9px;">${t.title.slice(0,2)}</div>`}</div>
       <div>
         <h4>${t.title}</h4>
         <time>${t.post_date || ""}</time>
-      </div>
-    </li>`).join("");
+      </div>`;
+    return t.id
+      ? `<li><a href="post.html?id=${t.id}" style="display:flex;gap:12px;align-items:flex-start;">${inner}</a></li>`
+      : `<li>${inner}</li>`;
+  }).join("");
 }
 
 async function renderHero() {
