@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search — TukTakMovies</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .list-page{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+  .list-page h1{font-family:var(--serif);font-size:clamp(24px,3vw,32px);margin:0 0 10px;}
+  .search-sub{color:var(--ink-soft);margin:0 0 26px;font-size:14px;}
+  .list-empty{color:var(--ink-soft);padding:40px 0;text-align:center;}
+  .search-form{display:flex;gap:10px;max-width:520px;margin:0 0 30px;}
+  .search-form input{flex:1;padding:12px 14px;border:1px solid var(--line);border-radius:7px;font-family:var(--sans);font-size:15px;}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="logo">
+      <span class="logo-mark">🎬</span>
+      <span class="logo-text">TUKTAK<strong>MOVIES</strong>
+        <small>MOVIE NEWS, REVIEWS &amp; MORE</small>
+      </span>
+    </a>
+  </div>
+</header>
+
+<main class="list-page">
+  <h1>Search Results</h1>
+  <form class="search-form" id="search-form">
+    <input type="text" id="search-input" name="q" placeholder="Search movies, reviews, articles…">
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+  <p class="search-sub" id="search-sub"></p>
+  <div class="grid grid-4" id="search-grid"></div>
+</main>
+
+<script>
+  function thumbHtmlFor(post) {
+    const img = post.image
+      ? `<img src="${post.image}" alt="${post.title} poster" loading="lazy">`
+      : `<div class="no-image">${post.title}</div>`;
+    const score = post.score ?? post.rating;
+    const badge = score != null ? `<span class="score">${score}</span>` : "";
+    return `<div class="thumb">${img}${badge}</div>`;
+  }
+
+  const typeLabels = { movie: "Movie", review: "Review", article: "Article" };
+
+  async function runSearch(q) {
+    const grid = document.getElementById("search-grid");
+    const sub = document.getElementById("search-sub");
+    if (!q) {
+      sub.textContent = "";
+      grid.innerHTML = "";
+      return;
+    }
+    sub.textContent = `Searching for "${q}"…`;
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const data = res.ok ? await res.json() : { posts: [] };
+      const posts = data.posts || [];
+      sub.textContent = posts.length
+        ? `${posts.length} result${posts.length === 1 ? "" : "s"} for "${q}"`
+        : `No results for "${q}" — try a different title, actor, or genre.`;
+      grid.innerHTML = posts.map(p => `
+        <a class="card" href="/movie/${p.id}">
+          ${thumbHtmlFor(p)}
+          <div class="body">
+            <h3>${p.title}</h3>
+            <div class="sub">
+              <span>${typeLabels[p.type] || p.type}</span>
+              <span>${p.post_date || p.year || ""}</span>
+            </div>
+          </div>
+        </a>`).join("");
+    } catch {
+      sub.textContent = "Couldn't run the search right now.";
+    }
+  }
+
+  const params = new URLSearchParams(location.search);
+  const initialQ = params.get("q") || "";
+  document.getElementById("search-input").value = initialQ;
+  runSearch(initialQ);
+
+  document.getElementById("search-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = document.getElementById("search-input").value.trim();
+    history.pushState({}, "", `/search?q=${encodeURIComponent(q)}`);
+    runSearch(q);
+  });
+</script>
+</body>
+</html>
