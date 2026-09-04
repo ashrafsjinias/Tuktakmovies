@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browse — TukTakMovies</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .list-page{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+  .list-page h1{font-family:var(--serif);font-size:clamp(24px,3vw,32px);margin:0 0 26px;}
+  .list-empty{color:var(--ink-soft);padding:40px 0;text-align:center;}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="index.html" class="logo">
+      <span class="logo-mark">🎬</span>
+      <span class="logo-text">TUKTAK<strong>MOVIES</strong>
+        <small>MOVIE NEWS, REVIEWS &amp; MORE</small>
+      </span>
+    </a>
+  </div>
+</header>
+
+<main class="list-page">
+  <h1 id="list-title">Browse</h1>
+  <div class="grid grid-4" id="list-grid"></div>
+</main>
+
+<script>
+  function thumbHtmlForList(post) {
+    const img = post.image
+      ? `<img src="${post.image}" alt="${post.title} poster" loading="lazy">`
+      : `<div class="no-image">${post.title}</div>`;
+    const score = post.score ?? post.rating;
+    const badge = score != null ? `<span class="score">${score}</span>` : "";
+    return `<div class="thumb">${img}${badge}</div>`;
+  }
+
+  async function loadList() {
+    const type = new URLSearchParams(location.search).get("type") || "movie";
+    const titles = { review: "Movie Reviews", movie: "Movies", article: "Articles", trending: "Trending Now", featured: "Featured" };
+    document.getElementById("list-title").textContent = titles[type] || "Browse";
+    document.title = `${titles[type] || "Browse"} — TukTakMovies`;
+
+    const grid = document.getElementById("list-grid");
+    try {
+      const res = await fetch(`/api/posts?type=${type}&limit=100`);
+      const data = res.ok ? await res.json() : { posts: [] };
+      const posts = data.posts || [];
+      if (!posts.length) {
+        grid.innerHTML = `<p class="list-empty">No posts here yet.</p>`;
+        return;
+      }
+      grid.innerHTML = posts.map(p => `
+        <a class="card" href="post.html?id=${p.id}">
+          ${thumbHtmlForList(p)}
+          <div class="body">
+            <h3>${p.title}</h3>
+            <div class="sub">
+              <span>${p.post_date || p.year || ""}</span>
+              ${p.comments ? `<span>💬 ${p.comments}</span>` : ""}
+            </div>
+          </div>
+        </a>`).join("");
+    } catch {
+      grid.innerHTML = `<p class="list-empty">Couldn't load posts right now.</p>`;
+    }
+  }
+  document.addEventListener("DOMContentLoaded", loadList);
+</script>
+</body>
+</html>
