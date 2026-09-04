@@ -10,7 +10,7 @@ const demo = {
     post_date: "May 23, 2025", comments: 12, rating: 8.6, link: "#",
   },
   review: [
-    { title: "Skyline Protocol", score: 8.2, post_date: "May 22, 2025", comments: 8 },
+    { title: "Skyline Protocol", score: 8.2, post_date: "May HMAC2025", comments: 8 },
     { title: "Nebula Guardians Vol. 3", score: 8.0, post_date: "May 21, 2025", comments: 5 },
     { title: "The Cinnamon Files", score: 9.1, post_date: "May 20, 2025", comments: 14 },
     { title: "Doctor Arcane: Multiverse Rift", score: 7.6, post_date: "May 19, 2025", comments: 7 },
@@ -63,7 +63,7 @@ function thumbHtml(post, scoreBadge) {
 // a real database id (demo/fallback posts have no id, so they stay static).
 function cardWrap(post, innerHtml) {
   return post.id
-    ? `<a class="card" href="post.html?id=${post.id}">${innerHtml}</a>`
+    ? `<a class="card" href="/movie/${post.id}">${innerHtml}</a>`
     : `<article class="card">${innerHtml}</article>`;
 }
 
@@ -108,7 +108,7 @@ function renderTrending(items) {
         <time>${t.post_date || ""}</time>
       </div>`;
     return t.id
-      ? `<li><a href="post.html?id=${t.id}" style="display:flex;gap:12px;align-items:flex-start;">${inner}</a></li>`
+      ? `<li><a href="/movie/${t.id}" style="display:flex;gap:12px;align-items:flex-start;">${inner}</a></li>`
       : `<li>${inner}</li>`;
   }).join("");
 }
@@ -160,11 +160,27 @@ function initHeader() {
 function initNewsletter() {
   const form = document.getElementById("newsletter-form");
   const note = document.getElementById("newsletter-note");
-  form?.addEventListener("submit", (e) => {
+  form?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    // Wire this up to your actual newsletter provider (Mailchimp, Buttondown, etc.)
-    note.textContent = "Thanks for subscribing! Please check your inbox to confirm.";
-    form.reset();
+    const emailInput = form.querySelector('input[type="email"]');
+    const email = emailInput?.value.trim();
+    note.textContent = "Subscribing…";
+    try {
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        note.textContent = data.error || "Couldn't subscribe right now.";
+        return;
+      }
+      note.textContent = "Thanks for subscribing! 🎬";
+      form.reset();
+    } catch {
+      note.textContent = "Couldn't reach the server — please try again.";
+    }
   });
 }
 
