@@ -120,13 +120,77 @@ async function importTrendingFromTMDB(env) {
       }
     }
 
+    // Extra details (genres, runtime, tagline, backdrop, trailer, cast) —
+    // fetched separately since /trending doesn't include them.
+    let genres = null, runtime = null, tagline = null, backdropUrl = null, trailerKey = null, castNames = null;
+    try {
+      const detailRes = await fetch(
+        `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${env.TMDB_API_KEY}&append_to_response=videos,credits`
+      );
+      if (detailRes.ok) {
+        const detail = await detailRes.json();
+        genres = (detail.genres || []).map(g => g.name).join(", ") || null;
+        runtime = detail.runtime || null;
+        tagline = detail.tagline || null;
+        castNames = (detail.credits?.cast || []).slice(0, 5).map(c => c.name).join(", ") || null;
+
+        const trailer = (detail.videos?.results || []).find(
+          v => v.site === "YouTube" && v.type === "Trailer"
+        ) || (detail.videos?.results || []).find(v => v.site === "YouTube");
+        trailerKey = trailer ? trailer.key : null;
+
+        if (detail.backdrop_path && env.IMAGES) {
+          try {
+            const backdropRes = await fetch(`https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`);
+            if (backdropRes.ok) {
+              const bKey = `tmdb-${movie.id}-backdrop.jpg`;
+              await env.IMAGES.put(bKey, await backdropRes.arrayBuffer(), {
+                httpMetadata: { contentType: backdropRes.headers.get("Content-Type") || "image/jpeg" },
+              });
+              backdropUrl = `/images/${bKey}`;
+            }
+          } catch (err) {
+            console.log("Backdrop fetch failed for", movie.id, err);
+          }
+        }
+      }
+    } catch (err) {
+      console.log("Detail fetch failed for", movie.id, err);
+    }
+
+    // Where to Watch — TMDB's watch/providers endpoint is movie-specific and
+    // region-aware (powered by JustWatch). We default to the US region; the
+    // returned "link" already points at a page showing real availability,
+    // so we never invent a generic Netflix/Prime link.
+    let watchProviders = null, watchLink = null;
+    try {
+      const wRes = await fetch(
+        `https://api.themoviedb.org/3/movie/${movie.id}/watch/providers?api_key=${env.TMDB_API_KEY}`
+      );
+      if (wRes.ok) {
+        const wData = await wRes.json();
+        const region = wData.results?.US || wData.results?.GB || null;
+        if (region) {
+          const names = new Set();
+          for (const group of ["flatrate", "rent", "buy"]) {
+            (region[group] || []).forEach(p => names.add(p.provider_name));
+          }
+          watchProviders = names.size ? Array.from(names).join(", ") : null;
+          watchLink = region.link || null;
+        }
+      }
+    } catch (err) {
+      console.log("Watch providers fetch failed for", movie.id, err);
+    }
+
     const year = movie.release_date ? Number(movie.release_date.slice(0, 4)) : null;
     const rating = typeof movie.vote_average === "number" ? Math.round(movie.vote_average * 10) / 10 : null;
     const excerpt = (movie.overview || "").slice(0, 300);
 
     await env.DB.prepare(
-      `INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id,
+                          genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       TMDB_POST_TYPE,
       movie.title || movie.original_title || "Untitled",
@@ -138,13 +202,65 @@ async function importTrendingFromTMDB(env) {
       formatPostDate(new Date()),
       0,
       `https://www.themoviedb.org/movie/${movie.id}`,
-      movie.id
+      movie.id,
+      genres, runtime, tagline, backdropUrl, trailerKey, castNames,
+      watchProviders, watchLink
     ).run();
 
     imported++;
   }
 
   console.log(`TMDB import finished: ${imported} new post(s) added.`);
+}
+
+// ---------- Clean URL routing ----------
+// Maps pretty paths to the existing static files/pages. No new pages are
+// created here — this only lets the browser show a clean URL (e.g. /movies)
+// while the existing list.html / about.html / etc. keep doing the work.
+
+const CLEAN_ROUTES = {
+  "/movies": "/list.html?type=movie",
+  "/reviews": "/list.html?type=review",
+  "/articles": "/list.html?type=article",
+  "/tv-shows": "/coming-soon.html?section=TV%20Shows",
+  "/celebrities": "/coming-soon.html?section=Celebrities",
+  "/top-lists": "/coming-soon.html?section=Top%20Lists",
+  "/explainers": "/coming-soon.html?section=Explainers",
+  "/industry-news": "/coming-soon.html?section=Industry%20News",
+  "/about": "/about.html",
+  "/contact": "/contact.html",
+  "/write-for-us": "/write-for-us.html",
+  "/privacy-policy": "/privacy-policy.html",
+  "/terms": "/terms.html",
+  "/disclaimer": "/disclaimer.html",
+  "/dmca": "/dmca.html",
+  "/sitemap": "/sitemap.html",
+  "/admin": "/admin.html",
+  "/search": "/search.html",
+};
+
+function rewriteCleanUrl(request, url) {
+  const path = url.pathname.length > 1 ? url.pathname.replace(/\/$/, "") : url.pathname;
+
+  if (CLEAN_ROUTES[path]) {
+    const target = new URL(CLEAN_ROUTES[path] + url.search, url.origin);
+    return new Request(target.toString(), request);
+  }
+
+  const movieMatch = path.match(/^\/movie\/(\d+)$/);
+  if (movieMatch) {
+    const target = new URL(`/post.html?id=${movieMatch[1]}`, url.origin);
+    return new Request(target.toString(), request);
+  }
+
+  const genreMatch = path.match(/^\/genre\/([a-zA-Z0-9-]+)$/);
+  if (genreMatch) {
+    const name = genreMatch[1].replace(/-/g, " ");
+    const target = new URL(`/coming-soon.html?section=${encodeURIComponent(name)}`, url.origin);
+    return new Request(target.toString(), request);
+  }
+
+  return null;
 }
 
 // ---------- API ----------
@@ -214,6 +330,37 @@ async function handleApi(request, env, url) {
     return json({ ok: true });
   }
 
+  // -- search --
+  if (pathname === "/api/search" && request.method === "GET") {
+    const q = (url.searchParams.get("q") || "").trim();
+    if (!q) return json({ posts: [] });
+    const like = `%${q}%`;
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM posts
+       WHERE type IN ('movie','review','article')
+         AND (title LIKE ? OR excerpt LIKE ? OR genres LIKE ? OR cast_names LIKE ?)
+       ORDER BY created_at DESC LIMIT 40`
+    ).bind(like, like, like, like).all();
+    return json({ posts: results });
+  }
+
+  // -- newsletter --
+  if (pathname === "/api/subscribe" && request.method === "POST") {
+    const b = await request.json().catch(() => ({}));
+    const email = (b.email || "").trim().toLowerCase();
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!validEmail) return json({ error: "Please enter a valid email address." }, { status: 400 });
+    try {
+      await env.DB.prepare("INSERT INTO subscribers (email) VALUES (?)").bind(email).run();
+    } catch (err) {
+      // UNIQUE constraint = already subscribed; treat as success either way
+      if (!String(err).includes("UNIQUE")) {
+        return json({ error: "Could not save your subscription." }, { status: 500 });
+      }
+    }
+    return json({ ok: true });
+  }
+
   // -- posts --
   if (pathname === "/api/posts" && request.method === "GET") {
     const type = url.searchParams.get("type");
@@ -237,12 +384,16 @@ async function handleApi(request, env, url) {
       return json({ error: "title and a valid type are required." }, { status: 400 });
     }
     const result = await env.DB.prepare(
-      `INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link,
+                          genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       b.type, b.title, b.excerpt || null, b.image || null,
       b.score ?? null, b.rating ?? null, b.year ?? null,
-      b.post_date || null, b.comments ?? 0, b.link || null
+      b.post_date || null, b.comments ?? 0, b.link || null,
+      b.genres || null, b.runtime ?? null, b.tagline || null,
+      b.backdrop || null, b.trailer_key || null, b.cast_names || null,
+      b.watch_providers || null, b.watch_link || null
     ).run();
     return json({ ok: true, id: result.meta.last_row_id });
   }
@@ -264,12 +415,16 @@ async function handleApi(request, env, url) {
         return json({ error: "title and a valid type are required." }, { status: 400 });
       }
       await env.DB.prepare(
-        `UPDATE posts SET type=?, title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?
+        `UPDATE posts SET type=?, title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?,
+                          genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=?
          WHERE id=?`
       ).bind(
         b.type, b.title, b.excerpt || null, b.image || null,
         b.score ?? null, b.rating ?? null, b.year ?? null,
-        b.post_date || null, b.comments ?? 0, b.link || null, id
+        b.post_date || null, b.comments ?? 0, b.link || null,
+        b.genres || null, b.runtime ?? null, b.tagline || null,
+        b.backdrop || null, b.trailer_key || null, b.cast_names || null,
+        b.watch_providers || null, b.watch_link || null, id
       ).run();
       return json({ ok: true });
     }
@@ -297,6 +452,8 @@ export default {
     if (url.pathname.startsWith("/images/")) {
       return handleImage(request, env, url);
     }
+    const rewritten = rewriteCleanUrl(request, url);
+    if (rewritten) return env.ASSETS.fetch(rewritten);
     return env.ASSETS.fetch(request);
   },
 
