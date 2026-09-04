@@ -1,4 +1,4 @@
-name = "divine-wind-102e"
+name = "tuktakmovies"
 main = "worker/index.js"
 compatibility_date = "2026-01-01"
 
@@ -9,15 +9,35 @@ compatibility_date = "2026-01-01"
 directory = "./public"
 binding = "ASSETS"
 
-[[d1_databases]]
-binding = "DB"
-database_name = "tuktakmovies-db"
-database_id = "80b5691d-41da-457a-8f87-3ad8ca60c830"
+# NOTE: The D1 database binding is NOT declared here.
+# If you're deploying via the Cloudflare Dashboard + GitHub (no terminal),
+# add the D1 binding from: your Worker → Settings → Bindings → Add → D1 database
+# → variable name "DB" → select your database. See README.md for the full walkthrough.
+#
+# If you're deploying via the wrangler CLI instead, you can add this block
+# back in with your real database_id:
+#
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "tuktakmovies-db"
+# database_id = "your-database-id-here"
 
-[[r2_buckets]]
-binding = "IMAGES"
-bucket_name = "tuktakmovies-images"
+# NOTE: The R2 bucket binding (used for admin image uploads) is also NOT
+# declared here for the same reason. Add it from:
+# your Worker → Settings → Bindings → Add → R2 bucket → variable name "IMAGES"
+# → select your bucket. See README.md for the full walkthrough.
+#
+# If you're deploying via the wrangler CLI, you can add this block instead:
+#
+# [[r2_buckets]]
+# binding = "IMAGES"
+# bucket_name = "tuktakmovies-images"
 
-[observability]
-enabled = true
-head_sampling_rate = 1
+# NOTE: The Cron Trigger (for the automatic TMDB import) is also NOT declared
+# here. Add it from: your Worker → Triggers → Cron Triggers → Add Cron Trigger.
+# A schedule like "0 6 * * *" runs once a day at 06:00 UTC.
+#
+# If you're deploying via the wrangler CLI, you can add this block instead:
+#
+# [triggers]
+# crons = ["0 6 * * *"]

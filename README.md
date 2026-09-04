@@ -55,11 +55,24 @@ npx wrangler secret put ADMIN_PASSWORD
 ```
 এখানে যা টাইপ করবেন সেটাই হবে আপনার `/admin.html`-এ লগইন করার পাসওয়ার্ড। এটা কখনো কোডে লেখা থাকে না, Cloudflare-এ এনক্রিপ্টেড থাকে।
 
-### ৬. ডিপ্লয় করুন
+### ৬. ছবি আপলোডের জন্য R2 বাকেট তৈরি করুন
+Admin panel থেকে সরাসরি মুভি পোস্টার আপলোড করার জন্য Cloudflare R2 (অবজেক্ট স্টোরেজ) লাগবে:
+```bash
+npx wrangler r2 bucket create tuktakmovies-images
+```
+তারপর `wrangler.toml`-এ কমেন্ট করা `[[r2_buckets]]` ব্লকটা আনকমেন্ট করে দিন (`binding = "IMAGES"`, `bucket_name = "tuktakmovies-images"`)।
+
+### ৭. ডিপ্লয় করুন
 ```bash
 npx wrangler deploy
 ```
 কমান্ড শেষ হলে একটা `*.workers.dev` লিংক দেখাবে — এটাই আপনার লাইভ সাইট।
+
+## GitHub + Dashboard দিয়ে করলে (কোনো টার্মিনাল ছাড়া)
+D1-এর মতোই R2 বাকেটও ড্যাশবোর্ড থেকে বানানো যায়:
+1. Cloudflare Dashboard → **R2** → **Create bucket** → নাম দিন `tuktakmovies-images`
+2. আপনার Worker → **Settings → Bindings → Add → R2 bucket** → Variable name-এ ঠিক `IMAGES` লিখুন → বাকেট সিলেক্ট করুন → Save/Deploy
+3. `wrangler.toml`/কোড ফাইলে কিছু বদলানো লাগবে না — বাইন্ডিং শুধু Dashboard থেকে যোগ করলেই কাজ করবে।
 
 ## ব্যবহার করবেন কীভাবে
 1. আপনার সাইটের `/admin.html` এ যান (যেমন `https://your-site.workers.dev/admin.html`)।
@@ -89,3 +102,4 @@ Cloudflare Dashboard → **Workers & Pages → Create → Connect to Git** থ�
 - **মোবাইল হেডার বাগ:** টপবার আগে ফিক্সড height-এ ছিল বলে তারিখ/লিংক wrap করলে হেডারের সাথে ওভারল্যাপ করত। এখন height auto + wrap হয়, ছোট স্ক্রিনে অপ্রয়োজনীয় জিনিস (তারিখ, About/Contact লিংক) লুকিয়ে যায়।
 - **হিরো ব্যানারের placeholder ছবি:** আগের placeholder ছবির মধ্যে বড় করে টেক্সট বসানো ছিল যেটা এলোমেলো লাগছিল — এখন CSS দিয়ে বানানো একটা পরিষ্কার gradient ব্যবহার করা হয়েছে, আর Featured পোস্ট যোগ করলে আপনার নিজের ছবি সেখানে বসে যাবে।
 - **কোড ছাড়া পোস্ট করা:** Admin Panel + D1 ডাটাবেজ যোগ করা হয়েছে, যাতে প্রতিটা পোস্টের জন্য আর কোড এডিট করতে না হয়।
+- **সরাসরি ছবি আপলোড:** এখন থেকে Admin panel-এ শুধু ইমেজ লিংক পেস্ট করা লাগবে না — ফোন/কম্পিউটার থেকে সরাসরি পোস্টার ছবি আপলোড করা যায় (Cloudflare R2-তে জমা হয়), সাথে সাথে একটা প্রিভিউও দেখা যায়।
