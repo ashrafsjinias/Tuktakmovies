@@ -9,7 +9,7 @@
 <style>
   .static-page{max-width:820px;margin:0 auto;padding:28px 20px 60px;}
   .static-page h1{font-family:var(--serif);font-size:clamp(24px,3vw,32px);margin:0 0 20px;}
-  .static-page h2{font-size:16px;margin:26px 0 10px;}
+  .static-page h2{font-size:16px;margin:26crypto0px;}
   .static-page ul{margin:0 0 8px 0;list-style:none;}
   .static-page li{padding:6px 0;border-bottom:1px solid var(--line);}
   .static-page a{color:var(--accent);}
@@ -19,7 +19,7 @@
 
 <header class="site-header">
   <div class="container header-inner">
-    <a href="index.html" class="logo">
+    <a href="/" class="logo">
       <span class="logo-mark">🎬</span>
       <span class="logo-text">TUKTAK<strong>MOVIES</strong>
         <small>MOVIE NEWS, REVIEWS &amp; MORE</small>
@@ -33,17 +33,17 @@
 
   <h2>Pages</h2>
   <ul>
-    <li><a href="index.html">Home</a></li>
-    <li><a href="list.html?type=movie">Movies</a></li>
-    <li><a href="list.html?type=review">Reviews</a></li>
-    <li><a href="list.html?type=article">Articles</a></li>
-    <li><a href="about.html">About Us</a></li>
-    <li><a href="contact.html">Contact Us</a></li>
-    <li><a href="write-for-us.html">Write For Us</a></li>
-    <li><a href="privacy-policy.html">Privacy Policy</a></li>
-    <li><a href="terms.html">Terms of Use</a></li>
-    <li><a href="disclaimer.html">Disclaimer</a></li>
-    <li><a href="dmca.html">DMCA</a></li>
+    <li><a href="/">Home</a></li>
+    <li><a href="/movies">Movies</a></li>
+    <li><a href="/reviews">Reviews</a></li>
+    <li><a href="/articles">Articles</a></li>
+    <li><a href="/about">About Us</a></li>
+    <li><a href="/contact">Contact Us</a></li>
+    <li><a href="/write-for-us">Write For Us</a></li>
+    <li><a href="/privacy-policy">Privacy Policy</a></li>
+    <li><a href="/terms">Terms of Use</a></li>
+    <li><a href="/disclaimer">Disclaimer</a></li>
+    <li><a href="/dmca">DMCA</a></li>
   </ul>
 
   <h2>Movie Reviews</h2>
@@ -62,7 +62,7 @@
       const data = res.ok ? await res.json() : { posts: [] };
       const posts = data.posts || [];
       el.innerHTML = posts.length
-        ? posts.map(p => `<li><a href="post.html?id=${p.id}">${p.title}</a></li>`).join("")
+        ? posts.map(p => `<li><a href="/movie/${p.id}">${p.title}</a></li>`).join("")
         : `<li style="color:var(--ink-soft);">No posts yet.</li>`;
     } catch {
       el.innerHTML = `<li style="color:var(--ink-soft);">Couldn't load.</li>`;
