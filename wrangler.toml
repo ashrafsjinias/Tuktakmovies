@@ -19,7 +19,7 @@ binding = "ASSETS"
 #
 # [[d1_databases]]
 # binding = "DB"
-# database_name = ""
+# database_name = "tuktakmovies-db"
 # database_id = "80b5691d-41da-457a-8f87-3ad8ca60c830"
 
 # NOTE: The R2 bucket binding (used for admin image uploads) is also NOT
