@@ -150,18 +150,14 @@ async function backfillTmdbDetails(env, limit = 10) {
   if (!env.TMDB_API_KEY || !env.DB) return { updated: 0 };
 
   const { results } = await env.DB.prepare(
-    `SELECT id, tmdb_id FROM posts
-     WHERE tmdb_id IS NOT NULL AND (genres IS NULL OR genres = '')
-     LIMIT ?`
+    "SELECT id, tmdb_id FROM posts WHERE tmdb_id IS NOT NULL AND (genres IS NULL OR genres = '') LIMIT ?"
   ).bind(limit).all();
 
   let updated = 0;
   for (const row of results) {
     const extra = await fetchTmdbExtras(env, row.tmdb_id);
     await env.DB.prepare(
-      `UPDATE posts SET genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?,
-                        watch_providers=?, watch_link=?
-       WHERE id=?`
+      "UPDATE posts SET genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=? WHERE id=?"
     ).bind(
       extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
       extra.watchProviders, extra.watchLink, row.id
@@ -224,9 +220,7 @@ async function importTrendingFromTMDB(env) {
     const excerpt = (movie.overview || "").slice(0, 300);
 
     await env.DB.prepare(
-      `INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id,
-                          genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       TMDB_POST_TYPE,
       movie.title || movie.original_title || "Untitled",
@@ -379,10 +373,7 @@ async function handleApi(request, env, url) {
     if (!q) return json({ posts: [] });
     const like = `%${q}%`;
     const { results } = await env.DB.prepare(
-      `SELECT * FROM posts
-       WHERE type IN ('movie','review','article')
-         AND (title LIKE ? OR excerpt LIKE ? OR genres LIKE ? OR cast_names LIKE ?)
-       ORDER BY created_at DESC LIMIT 40`
+      "SELECT * FROM posts WHERE type IN ('movie','review','article') AND (title LIKE ? OR excerpt LIKE ? OR genres LIKE ? OR cast_names LIKE ?) ORDER BY created_at DESC LIMIT 40"
     ).bind(like, like, like, like).all();
     return json({ posts: results });
   }
@@ -427,4 +418,76 @@ async function handleApi(request, env, url) {
       return json({ error: "title and a valid type are required." }, { status: 400 });
     }
     const result = await env.DB.prepare(
-      `INSERT INTO posts (type, title, excerpt, image,
+      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      b.type, b.title, b.excerpt || null, b.image || null,
+      b.score ?? null, b.rating ?? null, b.year ?? null,
+      b.post_date || null, b.comments ?? 0, b.link || null,
+      b.genres || null, b.runtime ?? null, b.tagline || null,
+      b.backdrop || null, b.trailer_key || null, b.cast_names || null,
+      b.watch_providers || null, b.watch_link || null
+    ).run();
+    return json({ ok: true, id: result.meta.last_row_id });
+  }
+
+  const singleMatch = pathname.match(/^\/api\/posts\/(\d+)$/);
+  if (singleMatch) {
+    const id = Number(singleMatch[1]);
+
+    if (request.method === "GET") {
+      const post = await env.DB.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first();
+      if (!post) return json({ error: "Not found" }, { status: 404 });
+      return json({ post });
+    }
+
+    if (request.method === "PUT") {
+      if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
+      const b = await request.json().catch(() => ({}));
+      if (!b.title || !ALLOWED_TYPES.includes(b.type)) {
+        return json({ error: "title and a valid type are required." }, { status: 400 });
+      }
+      await env.DB.prepare(
+        "UPDATE posts SET type=?, title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?, genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=? WHERE id=?"
+      ).bind(
+        b.type, b.title, b.excerpt || null, b.image || null,
+        b.score ?? null, b.rating ?? null, b.year ?? null,
+        b.post_date || null, b.comments ?? 0, b.link || null,
+        b.genres || null, b.runtime ?? null, b.tagline || null,
+        b.backdrop || null, b.trailer_key || null, b.cast_names || null,
+        b.watch_providers || null, b.watch_link || null, id
+      ).run();
+      return json({ ok: true });
+    }
+
+    if (request.method === "DELETE") {
+      if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
+      await env.DB.prepare("DELETE FROM posts WHERE id = ?").bind(id).run();
+      return json({ ok: true });
+    }
+  }
+
+  return json({ error: "Not found" }, { status: 404 });
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/")) {
+      try {
+        return await handleApi(request, env, url);
+      } catch (err) {
+        return json({ error: String(err) }, { status: 500 });
+      }
+    }
+    if (url.pathname.startsWith("/images/")) {
+      return handleImage(request, env, url);
+    }
+    const rewritten = rewriteCleanUrl(request, url);
+    if (rewritten) return env.ASSETS.fetch(rewritten);
+    return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(importTrendingFromTMDB(env));
+  },
+};
