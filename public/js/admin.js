@@ -1,493 +1,315 @@
-// ---------- Small helpers ----------
+const loginView = document.getElementById("login-view");
+const dashboardView = document.getElementById("dashboard-view");
+const loginForm = document.getElementById("login-form");
+const loginError = document.getElementById("login-error");
+const logoutBtn = document.getElementById("logout-btn");
 
-function json(data, init = {}) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: { "Content-Type": "application/json; charset=utf-8", ...(init.headers || {}) },
-  });
-}
+const postForm = document.getElementById("post-form");
+const formTitle = document.getElementById("form-title");
+const formError = document.getElementById("form-error");
+const cancelEditBtn = document.getElementById("cancel-edit");
+const filterType = document.getElementById("filter-type");
+const postList = document.getElementById("post-list");
 
-function getCookie(request, name) {
-  const header = request.headers.get("Cookie") || "";
-  const match = header.match(new RegExp("(?:^|; )" + name + "=([^;]+)"));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-async function hmac(secret, message) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
-  return btoa(String.fromCharCode(...new Uint8Array(sig)));
-}
-
-async function makeSessionToken(secret) {
-  const expires = Date.now() + 1000 * 60 * 60 * 24 * 7; // 7 days
-  const sig = await hmac(secret, String(expires));
-  return `${expires}.${sig}`;
-}
-
-async function isValidSession(token, secret) {
-  if (!token) return false;
-  const [expires, sig] = token.split(".");
-  if (!expires || !sig) return false;
-  if (Number(expires) < Date.now()) return false;
-  const expected = await hmac(secret, expires);
-  return expected === sig;
-}
-
-async function requireAuth(request, env) {
-  const token = getCookie(request, "admin_session");
-  return isValidSession(token, env.ADMIN_PASSWORD);
-}
-
-const ALLOWED_TYPES = ["featured", "review", "movie", "article", "trending"];
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
-
-function makeImageKey(filename) {
-  const extMatch = /\.([a-zA-Z0-9]+)$/.exec(filename || "");
-  const ext = (extMatch ? extMatch[1] : "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-  return `${crypto.randomUUID()}.${ext}`;
-}
-
-// ---------- Serving uploaded images from R2 ----------
-
-async function handleImage(request, env, url) {
-  if (!env.IMAGES) return new Response("Image storage isn't set up.", { status: 404 });
-  const key = decodeURIComponent(url.pathname.replace(/^\/images\//, ""));
-  if (!key) return new Response("Not found", { status: 404 });
-  const object = await env.IMAGES.get(key);
-  if (!object) return new Response("Not found", { status: 404 });
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("etag", object.httpEtag);
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
-  return new Response(object.body, { headers });
-}
-
-// ---------- TMDB auto-import (runs on a Cron Trigger) ----------
-
-const TMDB_IMPORT_LIMIT = 5; // how many new movies to add per run
-const TMDB_POST_TYPE = "movie"; // which section these land in: "movie", "trending", or "review"
-
-function formatPostDate(d) {
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
-
-// Fetches genres/runtime/tagline/backdrop/trailer/cast + watch-provider info
-// for one TMDB movie id. Used by both the fresh import and the backfill
-// (for movies that were imported before these fields existed).
-async function fetchTmdbExtras(env, tmdbId) {
-  let genres = null, runtime = null, tagline = null, backdropUrl = null, trailerKey = null, castNames = null;
-  try {
-    const detailRes = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${env.TMDB_API_KEY}&append_to_response=videos,credits`
-    );
-    if (detailRes.ok) {
-      const detail = await detailRes.json();
-      genres = (detail.genres || []).map(g => g.name).join(", ") || null;
-      runtime = detail.runtime || null;
-      tagline = detail.tagline || null;
-      castNames = (detail.credits?.cast || []).slice(0, 5).map(c => c.name).join(", ") || null;
-
-      const trailer = (detail.videos?.results || []).find(
-        v => v.site === "YouTube" && v.type === "Trailer"
-      ) || (detail.videos?.results || []).find(v => v.site === "YouTube");
-      trailerKey = trailer ? trailer.key : null;
-
-      if (detail.backdrop_path && env.IMAGES) {
-        try {
-          const backdropRes = await fetch(`https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`);
-          if (backdropRes.ok) {
-            const bKey = `tmdb-${tmdbId}-backdrop.jpg`;
-            await env.IMAGES.put(bKey, await backdropRes.arrayBuffer(), {
-              httpMetadata: { contentType: backdropRes.headers.get("Content-Type") || "image/jpeg" },
-            });
-            backdropUrl = `/images/${bKey}`;
-          }
-        } catch (err) {
-          console.log("Backdrop fetch failed for", tmdbId, err);
-        }
-      }
-    }
-  } catch (err) {
-    console.log("Detail fetch failed for", tmdbId, err);
-  }
-
-  // Where to Watch — TMDB's watch/providers endpoint is movie-specific and
-  // region-aware (powered by JustWatch). We default to the US region; the
-  // returned "link" already points at a page showing real availability,
-  // so we never invent a generic Netflix/Prime link.
-  let watchProviders = null, watchLink = null;
-  try {
-    const wRes = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}/watch/providers?api_key=${env.TMDB_API_KEY}`
-    );
-    if (wRes.ok) {
-      const wData = await wRes.json();
-      const region = wData.results?.US || wData.results?.GB || null;
-      if (region) {
-        const names = new Set();
-        for (const group of ["flatrate", "rent", "buy"]) {
-          (region[group] || []).forEach(p => names.add(p.provider_name));
-        }
-        watchProviders = names.size ? Array.from(names).join(", ") : null;
-        watchLink = region.link || null;
-      }
-    }
-  } catch (err) {
-    console.log("Watch providers fetch failed for", tmdbId, err);
-  }
-
-  return { genres, runtime, tagline, backdropUrl, trailerKey, castNames, watchProviders, watchLink };
-}
-
-// Fills in genres/runtime/tagline/backdrop/trailer/cast/watch info for posts
-// that were TMDB-imported before these fields existed (so it never creates
-// duplicates — it only UPDATEs rows that already have a tmdb_id).
-async function backfillTmdbDetails(env, limit = 10) {
-  if (!env.TMDB_API_KEY || !env.DB) return { updated: 0 };
-
-  const { results } = await env.DB.prepare(
-    "SELECT id, tmdb_id FROM posts WHERE tmdb_id IS NOT NULL AND (genres IS NULL OR genres = '') LIMIT ?"
-  ).bind(limit).all();
-
-  let updated = 0;
-  for (const row of results) {
-    const extra = await fetchTmdbExtras(env, row.tmdb_id);
-    await env.DB.prepare(
-      "UPDATE posts SET genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=? WHERE id=?"
-    ).bind(
-      extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
-      extra.watchProviders, extra.watchLink, row.id
-    ).run();
-    updated++;
-  }
-  return { updated };
-}
-
-async function importTrendingFromTMDB(env) {
-  if (!env.TMDB_API_KEY) {
-    console.log("TMDB_API_KEY not set — skipping scheduled import.");
-    return;
-  }
-  if (!env.DB) {
-    console.log("D1 (DB) not bound — skipping scheduled import.");
-    return;
-  }
-
-  const listRes = await fetch(
-    `https://api.themoviedb.org/3/trending/movie/day?api_key=${env.TMDB_API_KEY}`
-  );
-  if (!listRes.ok) {
-    console.log("TMDB trending fetch failed:", listRes.status);
-    return;
-  }
-  const listData = await listRes.json();
-  const movies = (listData.results || []).slice(0, TMDB_IMPORT_LIMIT * 3); // headroom for skips
-
-  let imported = 0;
-  for (const movie of movies) {
-    if (imported >= TMDB_IMPORT_LIMIT) break;
-
-    const existing = await env.DB.prepare("SELECT id FROM posts WHERE tmdb_id = ?")
-      .bind(movie.id)
-      .first();
-    if (existing) continue; // already imported before
-
-    let imageUrl = null;
-    if (movie.poster_path && env.IMAGES) {
-      try {
-        const posterRes = await fetch(`https://image.tmdb.org/t/p/w500${movie.poster_path}`);
-        if (posterRes.ok) {
-          const key = `tmdb-${movie.id}.jpg`;
-          await env.IMAGES.put(key, await posterRes.arrayBuffer(), {
-            httpMetadata: { contentType: posterRes.headers.get("Content-Type") || "image/jpeg" },
-          });
-          imageUrl = `/images/${key}`;
-        }
-      } catch (err) {
-        console.log("Poster fetch failed for", movie.id, err);
-      }
-    }
-
-    // Extra details (genres, runtime, tagline, backdrop, trailer, cast, watch info)
-    const extra = await fetchTmdbExtras(env, movie.id);
-
-    const year = movie.release_date ? Number(movie.release_date.slice(0, 4)) : null;
-    const rating = typeof movie.vote_average === "number" ? Math.round(movie.vote_average * 10) / 10 : null;
-    const excerpt = (movie.overview || "").slice(0, 300);
-
-    await env.DB.prepare(
-      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(
-      TMDB_POST_TYPE,
-      movie.title || movie.original_title || "Untitled",
-      excerpt,
-      imageUrl,
-      rating,
-      rating,
-      year,
-      formatPostDate(new Date()),
-      0,
-      `https://www.themoviedb.org/movie/${movie.id}`,
-      movie.id,
-      extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
-      extra.watchProviders, extra.watchLink
-    ).run();
-
-    imported++;
-  }
-
-  console.log(`TMDB import finished: ${imported} new post(s) added.`);
-}
-
-// ---------- Clean URL routing ----------
-// Maps pretty paths to the existing static files/pages. No new pages are
-// created here — this only lets the browser show a clean URL (e.g. /movies)
-// while the existing list.html / about.html / etc. keep doing the work.
-
-const CLEAN_ROUTES = {
-  "/movies": "/list.html?type=movie",
-  "/reviews": "/list.html?type=review",
-  "/articles": "/list.html?type=article",
-  "/tv-shows": "/coming-soon.html?section=TV%20Shows",
-  "/celebrities": "/coming-soon.html?section=Celebrities",
-  "/top-lists": "/coming-soon.html?section=Top%20Lists",
-  "/explainers": "/coming-soon.html?section=Explainers",
-  "/industry-news": "/coming-soon.html?section=Industry%20News",
-  "/about": "/about.html",
-  "/contact": "/contact.html",
-  "/write-for-us": "/write-for-us.html",
-  "/privacy-policy": "/privacy-policy.html",
-  "/terms": "/terms.html",
-  "/disclaimer": "/disclaimer.html",
-  "/dmca": "/dmca.html",
-  "/sitemap": "/sitemap.html",
-  "/admin": "/admin.html",
-  "/search": "/search.html",
+const fields = {
+  id: document.getElementById("post-id"),
+  type: document.getElementById("post-type"),
+  title: document.getElementById("post-title"),
+  excerpt: document.getElementById("post-excerpt"),
+  image: document.getElementById("post-image"),
+  score: document.getElementById("post-score"),
+  rating: document.getElementById("post-rating"),
+  year: document.getElementById("post-year"),
+  post_date: document.getElementById("post-date"),
+  comments: document.getElementById("post-comments"),
+  link: document.getElementById("post-link"),
+  genres: document.getElementById("post-genres"),
+  tagline: document.getElementById("post-tagline"),
+  runtime: document.getElementById("post-runtime"),
+  trailer_key: document.getElementById("post-trailer"),
+  cast_names: document.getElementById("post-cast"),
+  watch_providers: document.getElementById("post-watch-providers"),
+  watch_link: document.getElementById("post-watch-link"),
 };
 
-function rewriteCleanUrl(request, url) {
-  const path = url.pathname.length > 1 ? url.pathname.replace(/\/$/, "") : url.pathname;
+const imageFileInput = document.getElementById("post-image-file");
+const uploadStatus = document.getElementById("upload-status");
+const imagePreview = document.getElementById("image-preview");
+const imagePreviewImg = document.getElementById("image-preview-img");
+const removeImageBtn = document.getElementById("remove-image-btn");
 
-  if (CLEAN_ROUTES[path]) {
-    const target = new URL(CLEAN_ROUTES[path] + url.search, url.origin);
-    return new Request(target.toString(), request);
+function showImagePreview(url) {
+  if (!url) {
+    imagePreview.hidden = true;
+    imagePreviewImg.removeAttribute("src");
+    return;
   }
-
-  const movieMatch = path.match(/^\/movie\/(\d+)$/);
-  if (movieMatch) {
-    const target = new URL(`/post.html?id=${movieMatch[1]}`, url.origin);
-    return new Request(target.toString(), request);
-  }
-
-  const genreMatch = path.match(/^\/genre\/([a-zA-Z0-9-]+)$/);
-  if (genreMatch) {
-    const name = genreMatch[1].replace(/-/g, " ");
-    const target = new URL(`/coming-soon.html?section=${encodeURIComponent(name)}`, url.origin);
-    return new Request(target.toString(), request);
-  }
-
-  return null;
+  imagePreviewImg.src = url;
+  imagePreview.hidden = false;
 }
 
-// ---------- API ----------
-
-async function handleApi(request, env, url) {
-  const { pathname } = url;
-
-  // -- auth --
-  if (pathname === "/api/login" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
-    if (!env.ADMIN_PASSWORD) {
-      return json({ error: "Server is missing ADMIN_PASSWORD secret." }, { status: 500 });
+imageFileInput.addEventListener("change", async () => {
+  const file = imageFileInput.files[0];
+  if (!file) return;
+  uploadStatus.textContent = "Uploading…";
+  const body = new FormData();
+  body.append("file", file);
+  try {
+    const res = await fetch("/api/upload", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) {
+      uploadStatus.textContent = data.error || "Upload failed.";
+      return;
     }
-    if (body.password !== env.ADMIN_PASSWORD) {
-      return json({ error: "Wrong password." }, { status: 401 });
-    }
-    const token = await makeSessionToken(env.ADMIN_PASSWORD);
-    return json(
-      { ok: true },
-      {
-        headers: {
-          "Set-Cookie": `admin_session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=604800`,
-        },
-      }
-    );
+    fields.image.value = data.url;
+    showImagePreview(data.url);
+    uploadStatus.textContent = "Uploaded ✓";
+  } catch {
+    uploadStatus.textContent = "Could not reach the server.";
   }
+});
 
-  if (pathname === "/api/logout" && request.method === "POST") {
-    return json({ ok: true }, {
-      headers: { "Set-Cookie": "admin_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0" },
+removeImageBtn.addEventListener("click", () => {
+  fields.image.value = "";
+  imageFileInput.value = "";
+  uploadStatus.textContent = "";
+  showImagePreview("");
+});
+
+function showDashboard() {
+  loginView.hidden = true;
+  dashboardView.hidden = false;
+  loadPosts();
+}
+
+function showLogin() {
+  loginView.hidden = false;
+  dashboardView.hidden = true;
+}
+
+async function checkSession() {
+  try {
+    const res = await fetch("/api/me");
+    const data = await res.json();
+    if (data.authenticated) showDashboard();
+    else showLogin();
+  } catch {
+    showLogin();
+  }
+}
+
+loginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  loginError.textContent = "";
+  const password = document.getElementById("login-password").value;
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
     });
-  }
-
-  if (pathname === "/api/me" && request.method === "GET") {
-    const ok = await requireAuth(request, env);
-    return json({ authenticated: ok });
-  }
-
-  // -- image upload --
-  if (pathname === "/api/upload" && request.method === "POST") {
-    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-    if (!env.IMAGES) {
-      return json({ error: "Image storage (R2) isn't set up yet. See README.md." }, { status: 500 });
+    const data = await res.json();
+    if (!res.ok) {
+      loginError.textContent = data.error || "Login failed.";
+      return;
     }
-    const form = await request.formData().catch(() => null);
-    const file = form ? form.get("file") : null;
-    if (!file || typeof file === "string") {
-      return json({ error: "No file received." }, { status: 400 });
-    }
-    if (!file.type || !file.type.startsWith("image/")) {
-      return json({ error: "Only image files are allowed." }, { status: 400 });
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return json({ error: "Image is larger than 5MB." }, { status: 400 });
-    }
-    const key = makeImageKey(file.name);
-    await env.IMAGES.put(key, await file.arrayBuffer(), {
-      httpMetadata: { contentType: file.type },
-    });
-    return json({ url: `/images/${key}` });
+    showDashboard();
+  } catch {
+    loginError.textContent = "Could not reach the server.";
   }
+});
 
-  // -- manual trigger for testing the TMDB import (admin only) --
-  if (pathname === "/api/import-tmdb" && request.method === "POST") {
-    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-    await importTrendingFromTMDB(env);
-    return json({ ok: true });
-  }
+logoutBtn.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" });
+  showLogin();
+});
 
-  // -- backfill missing movie details on old TMDB-imported posts (admin only) --
-  if (pathname === "/api/backfill-tmdb" && request.method === "POST") {
-    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-    const result = await backfillTmdbDetails(env, 10);
-    return json({ ok: true, ...result });
-  }
-
-  // -- search --
-  if (pathname === "/api/search" && request.method === "GET") {
-    const q = (url.searchParams.get("q") || "").trim();
-    if (!q) return json({ posts: [] });
-    const like = `%${q}%`;
-    const { results } = await env.DB.prepare(
-      "SELECT * FROM posts WHERE type IN ('movie','review','article') AND (title LIKE ? OR excerpt LIKE ? OR genres LIKE ? OR cast_names LIKE ?) ORDER BY created_at DESC LIMIT 40"
-    ).bind(like, like, like, like).all();
-    return json({ posts: results });
-  }
-
-  // -- newsletter --
-  if (pathname === "/api/subscribe" && request.method === "POST") {
-    const b = await request.json().catch(() => ({}));
-    const email = (b.email || "").trim().toLowerCase();
-    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (!validEmail) return json({ error: "Please enter a valid email address." }, { status: 400 });
-    try {
-      await env.DB.prepare("INSERT INTO subscribers (email) VALUES (?)").bind(email).run();
-    } catch (err) {
-      // UNIQUE constraint = already subscribed; treat as success either way
-      if (!String(err).includes("UNIQUE")) {
-        return json({ error: "Could not save your subscription." }, { status: 500 });
-      }
-    }
-    return json({ ok: true });
-  }
-
-  // -- posts --
-  if (pathname === "/api/posts" && request.method === "GET") {
-    const type = url.searchParams.get("type");
-    const limit = Math.min(Number(url.searchParams.get("limit") || 50), 100);
-    let stmt;
-    if (type) {
-      stmt = env.DB.prepare(
-        "SELECT * FROM posts WHERE type = ? ORDER BY created_at DESC, id DESC LIMIT ?"
-      ).bind(type, limit);
+const syncTmdbBtn = document.getElementById("sync-tmdb-btn");
+const syncStatus = document.getElementById("sync-status");
+syncTmdbBtn.addEventListener("click", async () => {
+  syncStatus.textContent = "Syncing… this can take a few seconds";
+  syncTmdbBtn.disabled = true;
+  try {
+    const res = await fetch("/api/import-tmdb", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      syncStatus.textContent = data.error || "Sync failed.";
     } else {
-      stmt = env.DB.prepare("SELECT * FROM posts ORDER BY created_at DESC, id DESC LIMIT ?").bind(limit);
+      syncStatus.textContent = "Done ✓ — check the list below.";
+      loadPosts();
     }
-    const { results } = await stmt.all();
-    return json({ posts: results });
+  } catch {
+    syncStatus.textContent = "Could not reach the server.";
+  } finally {
+    syncTmdbBtn.disabled = false;
   }
+});
 
-  if (pathname === "/api/posts" && request.method === "POST") {
-    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-    const b = await request.json().catch(() => ({}));
-    if (!b.title || !ALLOWED_TYPES.includes(b.type)) {
-      return json({ error: "title and a valid type are required." }, { status: 400 });
-    }
-    const result = await env.DB.prepare(
-      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(
-      b.type, b.title, b.excerpt || null, b.image || null,
-      b.score ?? null, b.rating ?? null, b.year ?? null,
-      b.post_date || null, b.comments ?? 0, b.link || null,
-      b.genres || null, b.runtime ?? null, b.tagline || null,
-      b.backdrop || null, b.trailer_key || null, b.cast_names || null,
-      b.watch_providers || null, b.watch_link || null
-    ).run();
-    return json({ ok: true, id: result.meta.last_row_id });
-  }
-
-  const singleMatch = pathname.match(/^\/api\/posts\/(\d+)$/);
-  if (singleMatch) {
-    const id = Number(singleMatch[1]);
-
-    if (request.method === "GET") {
-      const post = await env.DB.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first();
-      if (!post) return json({ error: "Not found" }, { status: 404 });
-      return json({ post });
-    }
-
-    if (request.method === "PUT") {
-      if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-      const b = await request.json().catch(() => ({}));
-      if (!b.title || !ALLOWED_TYPES.includes(b.type)) {
-        return json({ error: "title and a valid type are required." }, { status: 400 });
+const backfillBtn = document.getElementById("backfill-btn");
+backfillBtn.addEventListener("click", async () => {
+  backfillBtn.disabled = true;
+  let totalUpdated = 0;
+  try {
+    // Runs in batches of 10 (per request) until nothing's left to backfill,
+    // so it also works for sites with a lot of older posts.
+    while (true) {
+      syncStatus.textContent = `Backfilling… (${totalUpdated} done so far)`;
+      const res = await fetch("/api/backfill-tmdb", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        syncStatus.textContent = data.error || "Backfill failed.";
+        break;
       }
-      await env.DB.prepare(
-        "UPDATE posts SET type=?, title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?, genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=? WHERE id=?"
-      ).bind(
-        b.type, b.title, b.excerpt || null, b.image || null,
-        b.score ?? null, b.rating ?? null, b.year ?? null,
-        b.post_date || null, b.comments ?? 0, b.link || null,
-        b.genres || null, b.runtime ?? null, b.tagline || null,
-        b.backdrop || null, b.trailer_key || null, b.cast_names || null,
-        b.watch_providers || null, b.watch_link || null, id
-      ).run();
-      return json({ ok: true });
+      totalUpdated += data.updated || 0;
+      if (!data.updated) {
+        syncStatus.textContent = totalUpdated
+          ? `Backfill done ✓ — updated ${totalUpdated} post(s).`
+          : "Nothing to backfill — all posts already have details.";
+        loadPosts();
+        break;
+      }
     }
-
-    if (request.method === "DELETE") {
-      if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-      await env.DB.prepare("DELETE FROM posts WHERE id = ?").bind(id).run();
-      return json({ ok: true });
-    }
+  } catch {
+    syncStatus.textContent = "Could not reach the server.";
+  } finally {
+    backfillBtn.disabled = false;
   }
+});
 
-  return json({ error: "Not found" }, { status: 404 });
+function resetForm() {
+  postForm.reset();
+  fields.id.value = "";
+  fields.type.value = "review";
+  fields.comments.value = "0";
+  formTitle.textContent = "Add a New Post";
+  cancelEditBtn.hidden = true;
+  formError.textContent = "";
+  imageFileInput.value = "";
+  uploadStatus.textContent = "";
+  showImagePreview("");
 }
 
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/")) {
-      try {
-        return await handleApi(request, env, url);
-      } catch (err) {
-        return json({ error: String(err) }, { status: 500 });
-      }
-    }
-    if (url.pathname.startsWith("/images/")) {
-      return handleImage(request, env, url);
-    }
-    const rewritten = rewriteCleanUrl(request, url);
-    if (rewritten) return env.ASSETS.fetch(rewritten);
-    return env.ASSETS.fetch(request);
-  },
+cancelEditBtn.addEventListener("click", resetForm);
 
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(importTrendingFromTMDB(env));
-  },
-};
+postForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  formError.textContent = "";
+
+  const payload = {
+    type: fields.type.value,
+    title: fields.title.value.trim(),
+    excerpt: fields.excerpt.value.trim(),
+    image: fields.image.value.trim(),
+    score: fields.score.value === "" ? null : Number(fields.score.value),
+    rating: fields.rating.value === "" ? null : Number(fields.rating.value),
+    year: fields.year.value === "" ? null : Number(fields.year.value),
+    post_date: fields.post_date.value.trim(),
+    comments: fields.comments.value === "" ? 0 : Number(fields.comments.value),
+    link: fields.link.value.trim(),
+    genres: fields.genres.value.trim(),
+    tagline: fields.tagline.value.trim(),
+    runtime: fields.runtime.value === "" ? null : Number(fields.runtime.value),
+    trailer_key: fields.trailer_key.value.trim(),
+    cast_names: fields.cast_names.value.trim(),
+    watch_providers: fields.watch_providers.value.trim(),
+    watch_link: fields.watch_link.value.trim(),
+  };
+
+  const id = fields.id.value;
+  const url = id ? `/api/posts/${id}` : "/api/posts";
+  const method = id ? "PUT" : "POST";
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      formError.textContent = data.error || "Could not save post.";
+      return;
+    }
+    resetForm();
+    loadPosts();
+  } catch {
+    formError.textContent = "Could not reach the server.";
+  }
+});
+
+function typeLabel(type) {
+  const labels = { featured: "Featured", review: "Review", movie: "Movie", article: "Article", trending: "Trending" };
+  return labels[type] || type;
+}
+
+function renderPostRow(post) {
+  const row = document.createElement("div");
+  row.className = "post-row";
+  row.innerHTML = `
+    <div class="thumb">${post.image ? `<img src="${post.image}" alt="">` : ""}</div>
+    <div class="info">
+      <h4>${post.title}</h4>
+      <span>${typeLabel(post.type)} · ${post.post_date || "no date"}</span>
+    </div>
+    <div class="actions">
+      <button class="edit-btn" type="button">Edit</button>
+      <button class="delete-btn" type="button">Delete</button>
+    </div>`;
+
+  row.querySelector(".edit-btn").addEventListener("click", () => {
+    fields.id.value = post.id;
+    fields.type.value = post.type;
+    fields.title.value = post.title || "";
+    fields.excerpt.value = post.excerpt || "";
+    fields.image.value = post.image || "";
+    fields.score.value = post.score ?? "";
+    fields.rating.value = post.rating ?? "";
+    fields.year.value = post.year ?? "";
+    fields.post_date.value = post.post_date || "";
+    fields.comments.value = post.comments ?? 0;
+    fields.link.value = post.link || "";
+    fields.genres.value = post.genres || "";
+    fields.tagline.value = post.tagline || "";
+    fields.runtime.value = post.runtime ?? "";
+    fields.trailer_key.value = post.trailer_key || "";
+    fields.cast_names.value = post.cast_names || "";
+    fields.watch_providers.value = post.watch_providers || "";
+    fields.watch_link.value = post.watch_link || "";
+    imageFileInput.value = "";
+    uploadStatus.textContent = "";
+    showImagePreview(post.image || "");
+    formTitle.textContent = `Editing: ${post.title}`;
+    cancelEditBtn.hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  row.querySelector(".delete-btn").addEventListener("click", async () => {
+    if (!confirm(`Delete "${post.title}"? This can't be undone.`)) return;
+    await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
+    loadPosts();
+  });
+
+  return row;
+}
+
+async function loadPosts() {
+  postList.innerHTML = "";
+  const type = filterType.value;
+  const url = type ? `/api/posts?type=${type}&limit=100` : "/api/posts?limit=100";
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    const posts = data.posts || [];
+    if (!posts.length) {
+      postList.innerHTML = `<p class="empty-note">No posts yet — add one above.</p>`;
+      return;
+    }
+    posts.forEach(post => postList.appendChild(renderPostRow(post)));
+  } catch {
+    postList.innerHTML = `<p class="empty-note">Could not load posts.</p>`;
+  }
+}
+
+filterType.addEventListener("change", loadPosts);
+
+checkSession();
