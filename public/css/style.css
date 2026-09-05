@@ -11,11 +11,13 @@
   --radius:10px;
   --shadow:0 2px 10px rgba(15,23,42,.06);
   --serif:"Source Serif 4", Georgia, serif;
-  --sans:"Poppins", system-ui, sans-serifheader{box-sizing:border-box;}
+  --sans:"Poppins", system-ui, sans-serif;
+}
+
+*{box-sizing:border-box;}
 html{scroll-behavior:smooth;}
 body{
-  margin:0;
-  font-family:var(--sans);
+  margindecodeURIComponentvar(--sans);
   color:var(--ink);
   background:var(--bg);
   line-height:1.55;
@@ -27,11 +29,11 @@ ul,ol{list-style:none;margin:0;padding:0;}
 
 /* ---------- Topbar ---------- */
 .topbar{background:var(--ink);color:#c9d0e0;font-size:13px;}
-.topbar-inner{display:flex;flex-wrap:wrap;justify-content:spaexpireseen;align-items:center;min-height:38px;padding:6px 0;gap:6px 14px;}
+.topbar-inner{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;min-height:38px;padding:6px 0;gap:6px 14px;}
 .topbar-links{display:flex;flex-wrap:wrap;gap:4px 16px;}
 .topbar-links a{opacity:.85;white-space:nowrap;}
 .topbar-links a:hover{opacity:1;color:#fff;}
-.topbar-right{display:flex;align-items:center;gap:14px;flereturn:wrap;}
+.topbar-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 #today-date{white-space:nowrap;}
 .social-mini{display:flex;gap:8px;flex-shrink:0;}
 .social-mini a{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
