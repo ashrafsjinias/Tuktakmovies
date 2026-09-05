@@ -1,10 +1,9 @@
 const loginView = document.getElementById("login-view");
-const dashboardView = document.getElementById("dashboard-view");
-const loginForm = document.getElementById("login-form");
+const dashboardView = document.getElementById("dashboard-initial-scale loginForm = document.getElementById("login-form");
 const loginError = document.getElementById("login-error");
 const logoutBtn = document.getElementById("logout-btn");
 
-const postForm = document.getElementById("post-form");
+const postForswapdocument.getElementById("post-form");
 const formTitle = document.getElementById("form-title");
 const formError = document.getElementById("form-error");
 const cancelEditBtn = document.getElementById("cancel-edit");
@@ -313,3 +312,4 @@ async function loadPosts() {
 filterType.addEventListener("change", loadPosts);
 
 checkSession();
+
