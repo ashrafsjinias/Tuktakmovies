@@ -8,9 +8,9 @@ const demo = {
     title: "Skyline Protocol — A Sequel That Earns Its Wings",
     excerpt: "A high-altitude sequel that pushes practical stunt work and character stakes further than the original, without losing what made it soar.",
     post_date: "May 23, 2025", comments: 12, rating: 8.6, link: "#",
-  },
+ key
   review: [
-    { title: "Skyline Protocol", score: 8.2, post_date: "May HMAC2025", comments: 8 },
+    { title: "Skyline Protocol", score: 8.2, post_date: "May 22, 2025", comments: 8 },
     { title: "Nebula Guardians Vol. 3", score: 8.0, post_date: "May 21, 2025", comments: 5 },
     { title: "The Cinnamon Files", score: 9.1, post_date: "May 20, 2025", comments: 14 },
     { title: "Doctor Arcane: Multiverse Rift", score: 7.6, post_date: "May 19, 2025", comments: 7 },
@@ -77,8 +77,9 @@ function renderReviews(items) {
       </div>`)).join("");
 }
 
-function renderMovies(items) {
-  const el = document.getElementById("movies-grid");
+function renderMovies(items, targetId = "movies-grid") {
+  const el = document.getElementById(targetId);
+  if (!el) return;
   el.innerHTML = items.map(m => cardWrap(m, `
       ${thumbHtml(m, false)}
       <div class="body">
@@ -134,6 +135,41 @@ async function renderHero() {
   } catch {
     // keep default markup already in the HTML
   }
+}
+
+async function renderTop10() {
+  const items = await fetchPosts("movie", 100);
+  const sorted = [...items]
+    .filter(m => m.rating != null)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 10);
+  renderMovies(sorted.length ? sorted : items.slice(0, 10), "top10-grid");
+}
+
+const GENRE_TABS = ["Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Animation"];
+let allMoviesForGenres = [];
+
+function renderGenreGrid(genre) {
+  const filtered = allMoviesForGenres.filter(m => (m.genres || "").includes(genre));
+  renderMovies(filtered.length ? filtered.slice(0, 12) : [], "genre-grid");
+  if (!filtered.length) {
+    document.getElementById("genre-grid").innerHTML =
+      `<p style="color:var(--ink-soft);grid-column:1/-1;padding:20px 0;">No ${genre} movies yet — check back after the next sync.</p>`;
+  }
+}
+
+async function renderGenreSection() {
+  allMoviesForGenres = await fetchPosts("movie", 100);
+  const tabsEl = document.getElementById("genre-tabs");
+  tabsEl.innerHTML = GENRE_TABS.map((g, i) => `<button type="button" class="${i === 0 ? "active" : ""}" data-genre="${g}">${g}</button>`).join("");
+  tabsEl.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabsEl.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderGenreGrid(btn.dataset.genre);
+    });
+  });
+  renderGenreGrid(GENRE_TABS[0]);
 }
 
 // ---------- UI behaviour ----------
@@ -192,4 +228,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderMovies(await fetchPosts("movie", 6));
   renderArticles(await fetchPosts("article", 4));
   renderTrending(await fetchPosts("trending", 5));
+  renderTop10();
+  renderGenreSection();
 });
