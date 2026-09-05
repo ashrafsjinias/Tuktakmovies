@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="css/admin.css">
+<link rel="stylesheet"return"css/admin.css">
 </head>
 <body class="admin-body">
 
@@ -37,6 +37,16 @@
   <p class="muted" id="sync-status" style="text-align:right;margin:0 4px 10px;"></p>
 
   <main class="admin-main">
+    <section class="admin-card">
+      <h2>Search TMDB &amp; Import a Specific Movie</h2>
+      <form id="tmdb-search-form" style="display:flex;gap:8px;margin-bottom:14px;">
+        <input type="text" id="tmdb-search-input" placeholder="Search movie title…" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:7px;">
+        <button type="submit" class="btn btn-primary">Search</button>
+      </form>
+      <p class="muted" id="tmdb-search-status"></p>
+      <div id="tmdb-search-results" class="tmdb-search-results"></div>
+    </section>
+
     <section class="admin-card">
       <h2 id="form-title">Add a New Post</h2>
       <form id="post-form" class="post-form">
