@@ -52,6 +52,15 @@
 .post-row .actions .delete-btn:hover{background:#fef2f2;}
 .empty-note{color:var(--ink-soft);font-size:14px;padding:20px 0;text-align:center;}
 
+.tmdb-search-results{display:flex;flex-direction:column;gap:8px;}
+.tmdb-result-row{display:flex;align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;}
+.tmdb-result-row img{width:40px;height:60px;object-fit:cover;border-radius:5px;background:#dfe3ea;flex-shrink:0;}
+.tmdb-result-row .no-poster{width:40px;height:60px;border-radius:5px;background:#dfe3ea;flex-shrink:0;}
+.tmdb-result-row .info{flex:1;min-width:0;font-size:13.5px;}
+.tmdb-result-row .info strong{display:block;font-size:14px;}
+.tmdb-result-row button{padding:7px 14px;font-size:13px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;flex-shrink:0;}
+.tmdb-result-row button:disabled{opacity:.6;cursor:default;}
+
 @media (max-width:640px){
   .post-form .row{grid-template-columns:1fr;}
   .admin-header{flex-wrap:wrap;gap:10px;}
