@@ -4,7 +4,7 @@ const loginForm = document.getElementById("login-form");
 const loginError = document.getElementById("login-error");
 const logoutBtn = document.getElementById("logout-btn");
 
-const postForm = document.getElementById("post-form");
+const postFoCookieocument.getElementById("post-form");
 const formTitle = document.getElementById("form-title");
 const formError = document.getElementById("form-error");
 const cancelEditBtn = document.getElementById("cancel-edit");
@@ -173,6 +173,73 @@ backfillBtn.addEventListener("click", async () => {
     syncStatus.textContent = "Could not reach the server.";
   } finally {
     backfillBtn.disabled = false;
+  }
+});
+
+const tmdbSearchForm = document.getElementById("tmdb-search-form");
+const tmdbSearchInput = document.getElementById("tmdb-search-input");
+const tmdbSearchStatus = document.getElementById("tmdb-search-status");
+const tmdbSearchResults = document.getElementById("tmdb-search-results");
+
+function renderTmdbResults(results) {
+  if (!results.length) {
+    tmdbSearchResults.innerHTML = "";
+    return;
+  }
+  tmdbSearchResults.innerHTML = results.map(r => `
+    <div class="tmdb-result-row" data-tmdb-id="${r.tmdb_id}">
+      ${r.poster ? `<img src="${r.poster}" alt="">` : `<div class="no-poster"></div>`}
+      <div class="info">
+        <strong>${r.title}</strong>
+        ${r.year || ""} ${r.rating ? `· ⭐ ${r.rating.toFixed ? r.rating.toFixed(1) : r.rating}` : ""}
+      </div>
+      <button type="button" class="import-btn">Import</button>
+    </div>`).join("");
+
+  tmdbSearchResults.querySelectorAll(".tmdb-result-row").forEach(row => {
+    row.querySelector(".import-btn").addEventListener("click", async () => {
+      const btn = row.querySelector(".import-btn");
+      const tmdbId = Number(row.dataset.tmdbId);
+      btn.disabled = true;
+      btn.textContent = "Importing…";
+      try {
+        const res = await fetch("/api/tmdb-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tmdb_id: tmdbId }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          btn.textContent = "Failed";
+          return;
+        }
+        btn.textContent = data.alreadyImported ? "Already added" : "Added ✓";
+        loadPosts();
+      } catch {
+        btn.textContent = "Failed";
+      }
+    });
+  });
+}
+
+tmdbSearchForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const q = tmdbSearchInput.value.trim();
+  if (!q) return;
+  tmdbSearchStatus.textContent = "Searching…";
+  tmdbSearchResults.innerHTML = "";
+  try {
+    const res = await fetch(`/api/tmdb-search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      tmdbSearchStatus.textContent = data.error || "Search failed.";
+      return;
+    }
+    const results = data.results || [];
+    tmdbSearchStatus.textContent = results.length ? "" : "No results found.";
+    renderTmdbResults(results);
+  } catch {
+    tmdbSearchStatus.textContent = "Could not reach the server.";
   }
 });
 
