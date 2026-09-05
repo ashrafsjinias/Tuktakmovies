@@ -167,6 +167,62 @@ async function backfillTmdbDetails(env, limit = 10) {
   return { updated };
 }
 
+// Reuses an already-uploaded poster for this tmdb_id when we have one,
+// otherwise downloads it from TMDB and stores it in R2.
+async function getOrUploadPoster(env, movie) {
+  const existing = await env.DB.prepare(
+    "SELECT image FROM posts WHERE tmdb_id = ? AND image IS NOT NULL LIMIT 1"
+  ).bind(movie.id).first();
+  if (existing && existing.image) return existing.image;
+
+  if (!movie.poster_path || !env.IMAGES) return null;
+  try {
+    const posterRes = await fetch(`https://image.tmdb.org/t/p/w500${movie.poster_path}`);
+    if (posterRes.ok) {
+      const key = `tmdb-${movie.id}.jpg`;
+      await env.IMAGES.put(key, await posterRes.arrayBuffer(), {
+        httpMetadata: { contentType: posterRes.headers.get("Content-Type") || "image/jpeg" },
+      });
+      return `/images/${key}`;
+    }
+  } catch (err) {
+    console.log("Poster fetch failed for", movie.id, err);
+  }
+  return null;
+}
+
+// Keeps a single "featured" post (the homepage hero banner) in sync with
+// whichever movie is #1 on TMDB's trending list right now. Always UPDATEs
+// the same row instead of inserting a new one, so there's only ever one.
+async function upsertFeaturedFromTop(env, movie, extra, imageUrl) {
+  const year = movie.release_date ? Number(movie.release_date.slice(0, 4)) : null;
+  const rating = typeof movie.vote_average === "number" ? Math.round(movie.vote_average * 10) / 10 : null;
+  const excerpt = (movie.overview || "").slice(0, 300);
+  const postDate = formatPostDate(new Date());
+  const link = `https://www.themoviedb.org/movie/${movie.id}`;
+  const title = movie.title || movie.original_title || "Untitled";
+
+  const existing = await env.DB.prepare("SELECT id FROM posts WHERE type = 'featured' LIMIT 1").first();
+
+  if (existing) {
+    await env.DB.prepare(
+      "UPDATE posts SET title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?, tmdb_id=?, genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=? WHERE id=?"
+    ).bind(
+      title, excerpt, imageUrl, rating, rating, year, postDate, 0, link, movie.id,
+      extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
+      extra.watchProviders, extra.watchLink, existing.id
+    ).run();
+  } else {
+    await env.DB.prepare(
+      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES ('featured', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      title, excerpt, imageUrl, rating, rating, year, postDate, 0, link, movie.id,
+      extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
+      extra.watchProviders, extra.watchLink
+    ).run();
+  }
+}
+
 async function importTrendingFromTMDB(env) {
   if (!env.TMDB_API_KEY) {
     console.log("TMDB_API_KEY not set — skipping scheduled import.");
@@ -196,21 +252,7 @@ async function importTrendingFromTMDB(env) {
       .first();
     if (existing) continue; // already imported before
 
-    let imageUrl = null;
-    if (movie.poster_path && env.IMAGES) {
-      try {
-        const posterRes = await fetch(`https://image.tmdb.org/t/p/w500${movie.poster_path}`);
-        if (posterRes.ok) {
-          const key = `tmdb-${movie.id}.jpg`;
-          await env.IMAGES.put(key, await posterRes.arrayBuffer(), {
-            httpMetadata: { contentType: posterRes.headers.get("Content-Type") || "image/jpeg" },
-          });
-          imageUrl = `/images/${key}`;
-        }
-      } catch (err) {
-        console.log("Poster fetch failed for", movie.id, err);
-      }
-    }
+    const imageUrl = await getOrUploadPoster(env, movie);
 
     // Extra details (genres, runtime, tagline, backdrop, trailer, cast, watch info)
     const extra = await fetchTmdbExtras(env, movie.id);
@@ -238,6 +280,14 @@ async function importTrendingFromTMDB(env) {
     ).run();
 
     imported++;
+  }
+
+  // Keep the homepage hero banner pointed at the #1 trending movie right now.
+  if (movies.length) {
+    const topMovie = movies[0];
+    const topImage = await getOrUploadPoster(env, topMovie);
+    const topExtra = await fetchTmdbExtras(env, topMovie.id);
+    await upsertFeaturedFromTop(env, topMovie, topExtra, topImage);
   }
 
   console.log(`TMDB import finished: ${imported} new post(s) added.`);
