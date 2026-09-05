@@ -18,7 +18,7 @@
 html{scroll-behavior:smooth;}
 body{
   margin:0;
-font-family:var(--sans);
+  font-family:var(--sans);
   color:var(--ink);
   background:var(--bg);
   line-height:1.55;
