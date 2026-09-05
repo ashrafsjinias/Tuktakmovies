@@ -27,9 +27,10 @@
 <!-- Dashboard (hidden until logged in) -->
 <div id="dashboard-view" class="admin-wrap" hidden>
   <header class="admin-header">
-    <a href="index.html" class="logo"><span class="logo-mark">🎬</span><span class="logo-text">TUKTAK<strong>MOVIES</strong><small>ADMIN</small></span></a>
+    <a href="/" class="logo"><span class="logo-mark">🎬</span><span class="logo-text">TUKTAK<strong>MOVIES</strong><small>ADMIN</small></span></a>
     <div style="display:flex;gap:8px;">
       <button id="sync-tmdb-btn" class="btn btn-ghost">Sync from TMDB now</button>
+      <button id="backfill-btn" class="btn btn-ghost">Backfill old movie details</button>
       <button id="logout-btn" class="btn btn-ghost">Log Out</button>
     </div>
   </header>
@@ -94,6 +95,33 @@
         <label>Link <span class="muted">(where "Read Review" / the card should point to)</span>
           <input type="url" id="post-link" placeholder="https://…">
         </label>
+
+        <details style="margin-bottom:14px;">
+          <summary style="cursor:pointer;font-weight:600;font-size:13.5px;margin-bottom:10px;">Movie details (optional — auto-filled by TMDB import)</summary>
+          <label>Genres <span class="muted">(comma-separated, e.g. "Action, Sci-Fi")</span>
+            <input type="text" id="post-genres" placeholder="Action, Sci-Fi">
+          </label>
+          <label>Tagline
+            <input type="text" id="post-tagline" placeholder="e.g. Rise of a new hero">
+          </label>
+          <div class="row">
+            <label>Runtime (minutes)
+              <input type="number" id="post-runtime" min="0">
+            </label>
+            <label>Trailer <span class="muted">(YouTube video ID)</span>
+              <input type="text" id="post-trailer" placeholder="dQw4w9WgXcQ">
+            </label>
+          </div>
+          <label>Cast <span class="muted">(comma-separated names)</span>
+            <input type="text" id="post-cast" placeholder="Actor One, Actor Two, Actor Three">
+          </label>
+          <label>Where to watch <span class="muted">(comma-separated provider names, e.g. "Netflix, Apple TV")</span>
+            <input type="text" id="post-watch-providers" placeholder="Netflix, Amazon Prime Video">
+          </label>
+          <label>Where to watch — link <span class="muted">(a page showing real, region-specific availability)</span>
+            <input type="url" id="post-watch-link" placeholder="https://…">
+          </label>
+        </details>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Save Post</button>
