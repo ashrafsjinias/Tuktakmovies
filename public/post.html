@@ -22,7 +22,8 @@
   .post-detail .watch-section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:26px;}
   .post-detail .watch-section h3{margin:0 0 10px;font-size:15px;}
   .post-detail .watch-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
-  .post-detail .watch-pills span{background:var(--bg);border:1px solid var(--line);padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;}
+  .post-detail .watch-pills a{background:var(--bg);border:1px solid var(--line);padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;transition:background .15s ease,border-color .15s ease;}
+  .post-detail .watch-pills a:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
   .post-detail .watch-note{font-size:12.5px;color:var(--ink-soft);margin:0;}
   .post-detail .watch-note a{color:var(--accent);font-weight:600;}
   .post-detail .trailer-wrap{position:relative;width:100%;padding-top:56.25%;margin-bottom:26px;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);background:#000;}
@@ -50,6 +51,42 @@
 </main>
 
 <script>
+  // Best-effort fallback homepages, used only when a movie has no
+  // movie-specific watch_link from TMDB/JustWatch yet. Not movie-specific —
+  // just gets the visitor to the right service to search themselves.
+  const PROVIDER_HOMEPAGES = {
+    "Netflix": "https://www.netflix.com/",
+    "Amazon Prime Video": "https://www.primevideo.com/",
+    "Amazon Video": "https://www.primevideo.com/",
+    "Disney Plus": "https://www.disneyplus.com/",
+    "Disney+": "https://www.disneyplus.com/",
+    "Apple TV": "https://tv.apple.com/",
+    "Apple TV Plus": "https://tv.apple.com/",
+    "Apple TV+": "https://tv.apple.com/",
+    "HBO Max": "https://www.max.com/",
+    "Max": "https://www.max.com/",
+    "Hulu": "https://www.hulu.com/",
+    "Peacock": "https://www.peacocktv.com/",
+    "Paramount Plus": "https://www.paramountplus.com/",
+    "Paramount+": "https://www.paramountplus.com/",
+    "YouTube": "https://www.youtube.com/movies",
+    "Google Play Movies": "https://play.google.com/store/movies",
+    "Vudu": "https://www.vudu.com/",
+    "Starz": "https://www.starz.com/",
+    "Showtime": "https://www.showtime.com/",
+    "Crunchyroll": "https://www.crunchyroll.com/",
+    "MUBI": "https://mubi.com/",
+    "BritBox": "https://www.britbox.com/",
+    "Discovery Plus": "https://www.discoveryplus.com/",
+    "ESPN Plus": "https://plus.espn.com/",
+  };
+
+  function providerLinkFor(name, watchLink) {
+    // Prefer the movie-specific link (accurate for this exact title/region);
+    // fall back to the provider's own homepage only when we have nothing better.
+    return watchLink || PROVIDER_HOMEPAGES[name] || null;
+  }
+
   function renderWatchSection(post) {
     const providers = (post.watch_providers || "")
       .split(",").map(p => p.trim()).filter(Boolean);
@@ -60,10 +97,16 @@
           <p class="watch-note">Streaming availability isn't listed for this title yet.</p>
         </div>`;
     }
+    const pills = providers.map(name => {
+      const href = providerLinkFor(name, post.watch_link);
+      return href
+        ? `<a href="${href}" target="_blank" rel="noopener">${name}</a>`
+        : `<a href="#" onclick="return false;" style="cursor:default;">${name}</a>`;
+    }).join("");
     return `
       <div class="watch-section">
         <h3>Where to Watch</h3>
-        ${providers.length ? `<div class="watch-pills">${providers.map(p => `<span>${p}</span>`).join("")}</div>` : ""}
+        ${pills ? `<div class="watch-pills">${pills}</div>` : ""}
         <p class="watch-note">
           Availability may vary by region and change over time.
           ${post.watch_link ? `<a href="${post.watch_link}" target="_blank" rel="noopener">Check current availability →</a>` : ""}
