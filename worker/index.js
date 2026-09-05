@@ -75,6 +75,102 @@ function formatPostDate(d) {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
+// Fetches genres/runtime/tagline/backdrop/trailer/cast + watch-provider info
+// for one TMDB movie id. Used by both the fresh import and the backfill
+// (for movies that were imported before these fields existed).
+async function fetchTmdbExtras(env, tmdbId) {
+  let genres = null, runtime = null, tagline = null, backdropUrl = null, trailerKey = null, castNames = null;
+  try {
+    const detailRes = await fetch(
+      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${env.TMDB_API_KEY}&append_to_response=videos,credits`
+    );
+    if (detailRes.ok) {
+      const detail = await detailRes.json();
+      genres = (detail.genres || []).map(g => g.name).join(", ") || null;
+      runtime = detail.runtime || null;
+      tagline = detail.tagline || null;
+      castNames = (detail.credits?.cast || []).slice(0, 5).map(c => c.name).join(", ") || null;
+
+      const trailer = (detail.videos?.results || []).find(
+        v => v.site === "YouTube" && v.type === "Trailer"
+      ) || (detail.videos?.results || []).find(v => v.site === "YouTube");
+      trailerKey = trailer ? trailer.key : null;
+
+      if (detail.backdrop_path && env.IMAGES) {
+        try {
+          const backdropRes = await fetch(`https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`);
+          if (backdropRes.ok) {
+            const bKey = `tmdb-${tmdbId}-backdrop.jpg`;
+            await env.IMAGES.put(bKey, await backdropRes.arrayBuffer(), {
+              httpMetadata: { contentType: backdropRes.headers.get("Content-Type") || "image/jpeg" },
+            });
+            backdropUrl = `/images/${bKey}`;
+          }
+        } catch (err) {
+          console.log("Backdrop fetch failed for", tmdbId, err);
+        }
+      }
+    }
+  } catch (err) {
+    console.log("Detail fetch failed for", tmdbId, err);
+  }
+
+  // Where to Watch — TMDB's watch/providers endpoint is movie-specific and
+  // region-aware (powered by JustWatch). We default to the US region; the
+  // returned "link" already points at a page showing real availability,
+  // so we never invent a generic Netflix/Prime link.
+  let watchProviders = null, watchLink = null;
+  try {
+    const wRes = await fetch(
+      `https://api.themoviedb.org/3/movie/${tmdbId}/watch/providers?api_key=${env.TMDB_API_KEY}`
+    );
+    if (wRes.ok) {
+      const wData = await wRes.json();
+      const region = wData.results?.US || wData.results?.GB || null;
+      if (region) {
+        const names = new Set();
+        for (const group of ["flatrate", "rent", "buy"]) {
+          (region[group] || []).forEach(p => names.add(p.provider_name));
+        }
+        watchProviders = names.size ? Array.from(names).join(", ") : null;
+        watchLink = region.link || null;
+      }
+    }
+  } catch (err) {
+    console.log("Watch providers fetch failed for", tmdbId, err);
+  }
+
+  return { genres, runtime, tagline, backdropUrl, trailerKey, castNames, watchProviders, watchLink };
+}
+
+// Fills in genres/runtime/tagline/backdrop/trailer/cast/watch info for posts
+// that were TMDB-imported before these fields existed (so it never creates
+// duplicates — it only UPDATEs rows that already have a tmdb_id).
+async function backfillTmdbDetails(env, limit = 10) {
+  if (!env.TMDB_API_KEY || !env.DB) return { updated: 0 };
+
+  const { results } = await env.DB.prepare(
+    `SELECT id, tmdb_id FROM posts
+     WHERE tmdb_id IS NOT NULL AND (genres IS NULL OR genres = '')
+     LIMIT ?`
+  ).bind(limit).all();
+
+  let updated = 0;
+  for (const row of results) {
+    const extra = await fetchTmdbExtras(env, row.tmdb_id);
+    await env.DB.prepare(
+      `UPDATE posts SET genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?,
+                        watch_providers=?, watch_link=?
+       WHERE id=?`
+    ).bind(
+      extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
+      extra.watchProviders, extra.watchLink, row.id
+    ).run();
+    updated++;
+  }
+  return { updated };
+}
+
 async function importTrendingFromTMDB(env) {
   if (!env.TMDB_API_KEY) {
     console.log("TMDB_API_KEY not set — skipping scheduled import.");
@@ -120,68 +216,8 @@ async function importTrendingFromTMDB(env) {
       }
     }
 
-    // Extra details (genres, runtime, tagline, backdrop, trailer, cast) —
-    // fetched separately since /trending doesn't include them.
-    let genres = null, runtime = null, tagline = null, backdropUrl = null, trailerKey = null, castNames = null;
-    try {
-      const detailRes = await fetch(
-        `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${env.TMDB_API_KEY}&append_to_response=videos,credits`
-      );
-      if (detailRes.ok) {
-        const detail = await detailRes.json();
-        genres = (detail.genres || []).map(g => g.name).join(", ") || null;
-        runtime = detail.runtime || null;
-        tagline = detail.tagline || null;
-        castNames = (detail.credits?.cast || []).slice(0, 5).map(c => c.name).join(", ") || null;
-
-        const trailer = (detail.videos?.results || []).find(
-          v => v.site === "YouTube" && v.type === "Trailer"
-        ) || (detail.videos?.results || []).find(v => v.site === "YouTube");
-        trailerKey = trailer ? trailer.key : null;
-
-        if (detail.backdrop_path && env.IMAGES) {
-          try {
-            const backdropRes = await fetch(`https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`);
-            if (backdropRes.ok) {
-              const bKey = `tmdb-${movie.id}-backdrop.jpg`;
-              await env.IMAGES.put(bKey, await backdropRes.arrayBuffer(), {
-                httpMetadata: { contentType: backdropRes.headers.get("Content-Type") || "image/jpeg" },
-              });
-              backdropUrl = `/images/${bKey}`;
-            }
-          } catch (err) {
-            console.log("Backdrop fetch failed for", movie.id, err);
-          }
-        }
-      }
-    } catch (err) {
-      console.log("Detail fetch failed for", movie.id, err);
-    }
-
-    // Where to Watch — TMDB's watch/providers endpoint is movie-specific and
-    // region-aware (powered by JustWatch). We default to the US region; the
-    // returned "link" already points at a page showing real availability,
-    // so we never invent a generic Netflix/Prime link.
-    let watchProviders = null, watchLink = null;
-    try {
-      const wRes = await fetch(
-        `https://api.themoviedb.org/3/movie/${movie.id}/watch/providers?api_key=${env.TMDB_API_KEY}`
-      );
-      if (wRes.ok) {
-        const wData = await wRes.json();
-        const region = wData.results?.US || wData.results?.GB || null;
-        if (region) {
-          const names = new Set();
-          for (const group of ["flatrate", "rent", "buy"]) {
-            (region[group] || []).forEach(p => names.add(p.provider_name));
-          }
-          watchProviders = names.size ? Array.from(names).join(", ") : null;
-          watchLink = region.link || null;
-        }
-      }
-    } catch (err) {
-      console.log("Watch providers fetch failed for", movie.id, err);
-    }
+    // Extra details (genres, runtime, tagline, backdrop, trailer, cast, watch info)
+    const extra = await fetchTmdbExtras(env, movie.id);
 
     const year = movie.release_date ? Number(movie.release_date.slice(0, 4)) : null;
     const rating = typeof movie.vote_average === "number" ? Math.round(movie.vote_average * 10) / 10 : null;
@@ -203,8 +239,8 @@ async function importTrendingFromTMDB(env) {
       0,
       `https://www.themoviedb.org/movie/${movie.id}`,
       movie.id,
-      genres, runtime, tagline, backdropUrl, trailerKey, castNames,
-      watchProviders, watchLink
+      extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
+      extra.watchProviders, extra.watchLink
     ).run();
 
     imported++;
@@ -330,6 +366,13 @@ async function handleApi(request, env, url) {
     return json({ ok: true });
   }
 
+  // -- backfill missing movie details on old TMDB-imported posts (admin only) --
+  if (pathname === "/api/backfill-tmdb" && request.method === "POST") {
+    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
+    const result = await backfillTmdbDetails(env, 10);
+    return json({ ok: true, ...result });
+  }
+
   // -- search --
   if (pathname === "/api/search" && request.method === "GET") {
     const q = (url.searchParams.get("q") || "").trim();
@@ -384,80 +427,4 @@ async function handleApi(request, env, url) {
       return json({ error: "title and a valid type are required." }, { status: 400 });
     }
     const result = await env.DB.prepare(
-      `INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link,
-                          genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      b.type, b.title, b.excerpt || null, b.image || null,
-      b.score ?? null, b.rating ?? null, b.year ?? null,
-      b.post_date || null, b.comments ?? 0, b.link || null,
-      b.genres || null, b.runtime ?? null, b.tagline || null,
-      b.backdrop || null, b.trailer_key || null, b.cast_names || null,
-      b.watch_providers || null, b.watch_link || null
-    ).run();
-    return json({ ok: true, id: result.meta.last_row_id });
-  }
-
-  const singleMatch = pathname.match(/^\/api\/posts\/(\d+)$/);
-  if (singleMatch) {
-    const id = Number(singleMatch[1]);
-
-    if (request.method === "GET") {
-      const post = await env.DB.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first();
-      if (!post) return json({ error: "Not found" }, { status: 404 });
-      return json({ post });
-    }
-
-    if (request.method === "PUT") {
-      if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-      const b = await request.json().catch(() => ({}));
-      if (!b.title || !ALLOWED_TYPES.includes(b.type)) {
-        return json({ error: "title and a valid type are required." }, { status: 400 });
-      }
-      await env.DB.prepare(
-        `UPDATE posts SET type=?, title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?,
-                          genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=?
-         WHERE id=?`
-      ).bind(
-        b.type, b.title, b.excerpt || null, b.image || null,
-        b.score ?? null, b.rating ?? null, b.year ?? null,
-        b.post_date || null, b.comments ?? 0, b.link || null,
-        b.genres || null, b.runtime ?? null, b.tagline || null,
-        b.backdrop || null, b.trailer_key || null, b.cast_names || null,
-        b.watch_providers || null, b.watch_link || null, id
-      ).run();
-      return json({ ok: true });
-    }
-
-    if (request.method === "DELETE") {
-      if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
-      await env.DB.prepare("DELETE FROM posts WHERE id = ?").bind(id).run();
-      return json({ ok: true });
-    }
-  }
-
-  return json({ error: "Not found" }, { status: 404 });
-}
-
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/")) {
-      try {
-        return await handleApi(request, env, url);
-      } catch (err) {
-        return json({ error: String(err) }, { status: 500 });
-      }
-    }
-    if (url.pathname.startsWith("/images/")) {
-      return handleImage(request, env, url);
-    }
-    const rewritten = rewriteCleanUrl(request, url);
-    if (rewritten) return env.ASSETS.fetch(rewritten);
-    return env.ASSETS.fetch(request);
-  },
-
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(importTrendingFromTMDB(env));
-  },
-};
+      `INSERT INTO posts (type, title, excerpt, image,
