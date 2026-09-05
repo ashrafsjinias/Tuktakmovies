@@ -402,10 +402,10 @@ async function handleApi(request, env, url) {
     let stmt;
     if (type) {
       stmt = env.DB.prepare(
-        "SELECT * FROM posts WHERE type = ? ORDER BY id DESC LIMIT ?"
+        "SELECT * FROM posts WHERE type = ? ORDER BY created_at DESC, id DESC LIMIT ?"
       ).bind(type, limit);
     } else {
-      stmt = env.DB.prepare("SELECT * FROM posts ORDER BY id DESC LIMIT ?").bind(limit);
+      stmt = env.DB.prepare("SELECT * FROM posts ORDER BY created_at DESC, id DESC LIMIT ?").bind(limit);
     }
     const { results } = await stmt.all();
     return json({ posts: results });
