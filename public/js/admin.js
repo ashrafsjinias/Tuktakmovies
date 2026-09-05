@@ -145,6 +145,37 @@ syncTmdbBtn.addEventListener("click", async () => {
   }
 });
 
+const backfillBtn = document.getElementById("backfill-btn");
+backfillBtn.addEventListener("click", async () => {
+  backfillBtn.disabled = true;
+  let totalUpdated = 0;
+  try {
+    // Runs in batches of 10 (per request) until nothing's left to backfill,
+    // so it also works for sites with a lot of older posts.
+    while (true) {
+      syncStatus.textContent = `Backfilling… (${totalUpdated} done so far)`;
+      const res = await fetch("/api/backfill-tmdb", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        syncStatus.textContent = data.error || "Backfill failed.";
+        break;
+      }
+      totalUpdated += data.updated || 0;
+      if (!data.updated) {
+        syncStatus.textContent = totalUpdated
+          ? `Backfill done ✓ — updated ${totalUpdated} post(s).`
+          : "Nothing to backfill — all posts already have details.";
+        loadPosts();
+        break;
+      }
+    }
+  } catch {
+    syncStatus.textContent = "Could not reach the server.";
+  } finally {
+    backfillBtn.disabled = false;
+  }
+});
+
 function resetForm() {
   postForm.reset();
   fields.id.value = "";
