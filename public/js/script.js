@@ -914,7 +914,22 @@ const INDUSTRY_TABS = [
     label: "Japanese",
     match: "Japanese",
   },
+  
+  {
+    label: "South Indian",
+    match: "South Indian",
+  }, 
 
+  {
+    label: "Bengali",
+    match: "Bengali",
+  },
+
+  {
+    label: "Tv Shows",
+    match: "Tv Shows",
+  },
+   
 ];
 
 
