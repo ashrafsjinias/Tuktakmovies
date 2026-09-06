@@ -367,8 +367,7 @@ function rewriteCleanUrl(request, url) {
 
   const genreMatch = path.match(/^\/genre\/([a-zA-Z0-9-]+)$/);
   if (genreMatch) {
-    const name = genreMatch[1].replace(/-/g, " ");
-    const target = new URL(`/coming-soon.html?section=${encodeURIComponent(name)}`, url.origin);
+    const target = new URL(`/genre.html?slug=${genreMatch[1]}`, url.origin);
     return new Request(target.toString(), request);
   }
 
