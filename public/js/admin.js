@@ -145,6 +145,26 @@ syncTmdbBtn.addEventListener("click", async () => {
   }
 });
 
+const syncTvBtn = document.getElementById("sync-tv-btn");
+syncTvBtn.addEventListener("click", async () => {
+  syncStatus.textContent = "Syncing TV shows… this can take a few seconds";
+  syncTvBtn.disabled = true;
+  try {
+    const res = await fetch("/api/import-tmdb-tv", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      syncStatus.textContent = data.error || "TV sync failed.";
+    } else {
+      syncStatus.textContent = "Done ✓ — check the list below.";
+      loadPosts();
+    }
+  } catch {
+    syncStatus.textContent = "Could not reach the server.";
+  } finally {
+    syncTvBtn.disabled = false;
+  }
+});
+
 const backfillBtn = document.getElementById("backfill-btn");
 backfillBtn.addEventListener("click", async () => {
   backfillBtn.disabled = true;
@@ -187,7 +207,7 @@ function renderTmdbResults(results) {
     return;
   }
   tmdbSearchResults.innerHTML = results.map(r => `
-    <div class="tmdb-result-row" data-tmdb-id="${r.tmdb_id}">
+    <div class="tmdb-result-row" data-tmdb-id="${r.tmdb_id}" data-media-type="${r.media_type}">
       ${r.poster ? `<img src="${r.poster}" alt="">` : `<div class="no-poster"></div>`}
       <div class="info">
         <strong>${r.title}</strong>
@@ -200,13 +220,14 @@ function renderTmdbResults(results) {
     row.querySelector(".import-btn").addEventListener("click", async () => {
       const btn = row.querySelector(".import-btn");
       const tmdbId = Number(row.dataset.tmdbId);
+      const mediaType = row.dataset.mediaType;
       btn.disabled = true;
       btn.textContent = "Importing…";
       try {
         const res = await fetch("/api/tmdb-import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tmdb_id: tmdbId }),
+          body: JSON.stringify({ tmdb_id: tmdbId, media_type: mediaType }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -226,10 +247,11 @@ tmdbSearchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const q = tmdbSearchInput.value.trim();
   if (!q) return;
+  const media = document.querySelector('input[name="tmdb-media"]:checked')?.value || "movie";
   tmdbSearchStatus.textContent = "Searching…";
   tmdbSearchResults.innerHTML = "";
   try {
-    const res = await fetch(`/api/tmdb-search?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`/api/tmdb-search?q=${encodeURIComponent(q)}&media=${media}`);
     const data = await res.json();
     if (!res.ok) {
       tmdbSearchStatus.textContent = data.error || "Search failed.";
