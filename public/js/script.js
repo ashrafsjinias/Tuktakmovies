@@ -146,27 +146,35 @@ async function renderTop10() {
   renderMovies(sorted.length ? sorted : items.slice(0, 10), "top10-grid");
 }
 
-const GENRE_TABS = ["Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Animation"];
+const GENRE_TABS = [
+  { label: "Action", match: "Action" },
+  { label: "Comedy", match: "Comedy" },
+  { label: "Drama", match: "Drama" },
+  { label: "Horror", match: "Horror" },
+  { label: "Sci-Fi", match: "Science Fiction" },
+  { label: "Animation", match: "Animation" },
+];
 let allMoviesForGenres = [];
 
 function renderGenreGrid(genre) {
-  const filtered = allMoviesForGenres.filter(m => (m.genres || "").includes(genre));
+  const filtered = allMoviesForGenres.filter(m => (m.genres || "").toLowerCase().includes(genre.match.toLowerCase()));
   renderMovies(filtered.length ? filtered.slice(0, 12) : [], "genre-grid");
   if (!filtered.length) {
     document.getElementById("genre-grid").innerHTML =
-      `<p style="color:var(--ink-soft);grid-column:1/-1;padding:20px 0;">No ${genre} movies yet — check back after the next sync.</p>`;
+      `<p style="color:var(--ink-soft);grid-column:1/-1;padding:20px 0;">No ${genre.label} movies yet — check back after the next sync.</p>`;
   }
 }
 
 async function renderGenreSection() {
   allMoviesForGenres = await fetchPosts("movie", 100);
   const tabsEl = document.getElementById("genre-tabs");
-  tabsEl.innerHTML = GENRE_TABS.map((g, i) => `<button type="button" class="${i === 0 ? "active" : ""}" data-genre="${g}">${g}</button>`).join("");
+  tabsEl.innerHTML = GENRE_TABS.map((g, i) => `<button type="button" class="${i === 0 ? "active" : ""}" data-label="${g.label}">${g.label}</button>`).join("");
   tabsEl.querySelectorAll("button").forEach(btn => {
     btn.addEventListener("click", () => {
       tabsEl.querySelectorAll("button").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
-      renderGenreGrid(btn.dataset.genre);
+      const genre = GENRE_TABS.find(g => g.label === btn.dataset.label);
+      renderGenreGrid(genre);
     });
   });
   renderGenreGrid(GENRE_TABS[0]);
