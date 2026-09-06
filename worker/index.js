@@ -5,7 +5,7 @@ function json(data, init = {}) {
     ...init,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      ...(init.headers || {}),
+      ...(init.headers || {})
     },
   });
 }
@@ -26,7 +26,7 @@ async function hmac(secret, message) {
     enc.encode(secret),
     {
       name: "HMAC",
-      hash: "SHA-256",
+      hash: "SHA-256"
     },
     false,
     ["sign"]
@@ -50,15 +50,17 @@ async function makeSessionToken(secret) {
     Date.now() +
     1000 * 60 * 60 * 24 * 7;
 
-  const sig = await hmac(
-    secret,
-    String(expires)
-  );
+  const sig =
+    await hmac(
+      secret,
+      String(expires)
+    );
 
   return `${expires}.${sig}`;
 }
 
 async function isValidSession(token, secret) {
+
   if (!token) return false;
 
   const [expires, sig] =
@@ -72,19 +74,21 @@ async function isValidSession(token, secret) {
     return false;
   }
 
-  const expected = await hmac(
-    secret,
-    expires
-  );
+  const expected =
+    await hmac(
+      secret,
+      expires
+    );
 
   return expected === sig;
 }
 
 async function requireAuth(request, env) {
-  const token = getCookie(
-    request,
-    "admin_session"
-  );
+  const token =
+    getCookie(
+      request,
+      "admin_session"
+    );
 
   return isValidSession(
     token,
@@ -92,13 +96,12 @@ async function requireAuth(request, env) {
   );
 }
 
-
 const ALLOWED_TYPES = [
   "featured",
   "review",
   "movie",
   "article",
-  "trending",
+  "trending"
 ];
 
 const MAX_UPLOAD_BYTES =
@@ -108,6 +111,7 @@ const MAX_UPLOAD_BYTES =
 // ---------- Image helpers ----------
 
 function makeImageKey(filename) {
+
   const extMatch =
     /\.([a-zA-Z0-9]+)$/.exec(
       filename || ""
@@ -120,8 +124,11 @@ function makeImageKey(filename) {
         : "jpg"
     )
       .toLowerCase()
-      .replace(/[^a-z0-9]/g, "")
-      || "jpg";
+      .replace(
+        /[^a-z0-9]/g,
+        ""
+      )
+    || "jpg";
 
   return `${crypto.randomUUID()}.${ext}`;
 }
@@ -134,6 +141,7 @@ async function handleImage(
   env,
   url
 ) {
+
   if (!env.IMAGES) {
     return new Response(
       "Image storage isn't set up.",
@@ -141,12 +149,13 @@ async function handleImage(
     );
   }
 
-  const key = decodeURIComponent(
-    url.pathname.replace(
-      /^\/images\//,
-      ""
-    )
-  );
+  const key =
+    decodeURIComponent(
+      url.pathname.replace(
+        /^\/images\//,
+        ""
+      )
+    );
 
   if (!key) {
     return new Response(
@@ -165,7 +174,8 @@ async function handleImage(
     );
   }
 
-  const headers = new Headers();
+  const headers =
+    new Headers();
 
   object.writeHttpMetadata(
     headers
@@ -197,31 +207,28 @@ const TMDB_POST_TYPE =
 
 
 function formatPostDate(d) {
+
   return d.toLocaleDateString(
     "en-US",
     {
       month: "long",
       day: "numeric",
-      year: "numeric",
+      year: "numeric"
     }
   );
+
 }
 
 
-// ---------- Industry ----------
-
 function industryFromLanguage(lang) {
+
   if (lang === "hi") {
     return "Bollywood";
   }
 
   if (
-    [
-      "ta",
-      "te",
-      "ml",
-      "kn",
-    ].includes(lang)
+    ["ta", "te", "ml", "kn"]
+      .includes(lang)
   ) {
     return "South Indian";
   }
@@ -231,20 +238,23 @@ function industryFromLanguage(lang) {
   }
 
   return null;
+
 }
 
 
-// ---------- TMDB Extras ----------
+// ---------- TMDB extras ----------
 
 async function fetchTmdbExtras(
   env,
   tmdbId,
   mediaType = "movie"
 ) {
+
   const base =
     mediaType === "tv"
       ? "tv"
       : "movie";
+
 
   let genres = null;
   let runtime = null;
@@ -255,25 +265,31 @@ async function fetchTmdbExtras(
 
 
   try {
+
     const detailRes =
       await fetch(
         `https://api.themoviedb.org/3/${base}/${tmdbId}?api_key=${env.TMDB_API_KEY}&append_to_response=videos,credits`
       );
 
+
     if (detailRes.ok) {
+
       const detail =
         await detailRes.json();
 
 
       genres =
         (detail.genres || [])
-          .map(g => g.name)
+          .map(
+            g => g.name
+          )
           .join(", ")
         || null;
 
 
       runtime =
         mediaType === "tv"
+
           ? (
               Array.isArray(
                 detail.episode_run_time
@@ -282,17 +298,22 @@ async function fetchTmdbExtras(
               detail.episode_run_time[0]
             )
             || null
-          : detail.runtime || null;
+
+          : detail.runtime
+            || null;
 
 
       tagline =
-        detail.tagline || null;
+        detail.tagline
+        || null;
 
 
       castNames =
         (detail.credits?.cast || [])
           .slice(0, 5)
-          .map(c => c.name)
+          .map(
+            c => c.name
+          )
           .join(", ")
         || null;
 
@@ -305,7 +326,9 @@ async function fetchTmdbExtras(
               &&
               v.type === "Trailer"
           )
+
         ||
+
         (detail.videos?.results || [])
           .find(
             v =>
@@ -324,15 +347,17 @@ async function fetchTmdbExtras(
         &&
         env.IMAGES
       ) {
+
         try {
+
           const backdropRes =
             await fetch(
               `https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`
             );
 
-          if (
-            backdropRes.ok
-          ) {
+
+          if (backdropRes.ok) {
+
             const bKey =
               `tmdb-${base}-${tmdbId}-backdrop.jpg`;
 
@@ -346,33 +371,43 @@ async function fetchTmdbExtras(
                     backdropRes.headers.get(
                       "Content-Type"
                     )
-                    ||
-                    "image/jpeg",
-                },
+                    || "image/jpeg"
+                }
               }
             );
 
 
             backdropUrl =
               `/images/${bKey}`;
+
           }
 
-        } catch (err) {
+        }
+
+        catch (err) {
+
           console.log(
             "Backdrop fetch failed for",
             tmdbId,
             err
           );
+
         }
+
       }
+
     }
 
-  } catch (err) {
+  }
+
+  catch (err) {
+
     console.log(
       "Detail fetch failed for",
       tmdbId,
       err
     );
+
   }
 
 
@@ -381,6 +416,7 @@ async function fetchTmdbExtras(
 
 
   try {
+
     const wRes =
       await fetch(
         `https://api.themoviedb.org/3/${base}/${tmdbId}/watch/providers?api_key=${env.TMDB_API_KEY}`
@@ -388,6 +424,7 @@ async function fetchTmdbExtras(
 
 
     if (wRes.ok) {
+
       const wData =
         await wRes.json();
 
@@ -401,18 +438,19 @@ async function fetchTmdbExtras(
 
 
       if (region) {
+
         const names =
           new Set();
 
 
         for (
-          const group
-          of [
+          const group of [
             "flatrate",
             "rent",
-            "buy",
+            "buy"
           ]
         ) {
+
           (region[group] || [])
             .forEach(
               p =>
@@ -420,137 +458,160 @@ async function fetchTmdbExtras(
                   p.provider_name
                 )
             );
+
         }
 
 
         watchProviders =
           names.size
+
             ? Array.from(
                 names
               ).join(", ")
+
             : null;
 
 
         watchLink =
           region.link
-          ||
-          null;
+          || null;
+
       }
+
     }
 
-  } catch (err) {
+  }
+
+  catch (err) {
+
     console.log(
       "Watch providers fetch failed for",
       tmdbId,
       err
     );
+
   }
 
 
   return {
+
     genres,
+
     runtime,
+
     tagline,
+
     backdropUrl,
+
     trailerKey,
+
     castNames,
+
     watchProviders,
-    watchLink,
+
+    watchLink
+
   };
+
 }
 
 
-// ---------- Backfill ----------
+// ---------- Backfill old TMDB posts ----------
 
 async function backfillTmdbDetails(
   env,
   limit = 10
 ) {
+
   if (
     !env.TMDB_API_KEY
     ||
     !env.DB
   ) {
     return {
-      updated: 0,
+      updated: 0
     };
   }
 
 
   const { results } =
     await env.DB.prepare(
-      `
-      SELECT
-        id,
-        tmdb_id,
-        media_type
-      FROM posts
-      WHERE
-        tmdb_id IS NOT NULL
-        AND (
-          genres IS NULL
-          OR genres = ''
-        )
-      LIMIT ?
-      `
+      `SELECT id, tmdb_id, media_type
+       FROM posts
+       WHERE tmdb_id IS NOT NULL
+       AND (
+         genres IS NULL
+         OR genres = ''
+       )
+       LIMIT ?`
     )
-    .bind(limit)
-    .all();
+      .bind(
+        limit
+      )
+      .all();
 
 
   let updated = 0;
 
 
   for (
-    const row
-    of results
+    const row of results
   ) {
+
     const extra =
       await fetchTmdbExtras(
         env,
         row.tmdb_id,
-        row.media_type
-        ||
-        "movie"
+        row.media_type || "movie"
       );
 
 
     await env.DB.prepare(
-      `
-      UPDATE posts
-      SET
-        genres=?,
-        runtime=?,
-        tagline=?,
-        backdrop=?,
-        trailer_key=?,
-        cast_names=?,
-        watch_providers=?,
-        watch_link=?
-      WHERE id=?
-      `
+      `UPDATE posts
+       SET
+         genres=?,
+         runtime=?,
+         tagline=?,
+         backdrop=?,
+         trailer_key=?,
+         cast_names=?,
+         watch_providers=?,
+         watch_link=?
+       WHERE id=?`
     )
-    .bind(
-      extra.genres,
-      extra.runtime,
-      extra.tagline,
-      extra.backdropUrl,
-      extra.trailerKey,
-      extra.castNames,
-      extra.watchProviders,
-      extra.watchLink,
-      row.id
-    )
-    .run();
+      .bind(
+
+        extra.genres,
+
+        extra.runtime,
+
+        extra.tagline,
+
+        extra.backdropUrl,
+
+        extra.trailerKey,
+
+        extra.castNames,
+
+        extra.watchProviders,
+
+        extra.watchLink,
+
+        row.id
+
+      )
+      .run();
 
 
     updated++;
+
   }
 
 
   return {
-    updated,
+    updated
   };
+
 }
 
 
@@ -561,23 +622,21 @@ async function getOrUploadPoster(
   item,
   mediaType = "movie"
 ) {
+
   const existing =
     await env.DB.prepare(
-      `
-      SELECT image
-      FROM posts
-      WHERE
-        tmdb_id = ?
-        AND media_type = ?
-        AND image IS NOT NULL
-      LIMIT 1
-      `
+      `SELECT image
+       FROM posts
+       WHERE tmdb_id = ?
+       AND media_type = ?
+       AND image IS NOT NULL
+       LIMIT 1`
     )
-    .bind(
-      item.id,
-      mediaType
-    )
-    .first();
+      .bind(
+        item.id,
+        mediaType
+      )
+      .first();
 
 
   if (
@@ -599,6 +658,7 @@ async function getOrUploadPoster(
 
 
   try {
+
     const posterRes =
       await fetch(
         `https://image.tmdb.org/t/p/w500${item.poster_path}`
@@ -606,6 +666,7 @@ async function getOrUploadPoster(
 
 
     if (posterRes.ok) {
+
       const key =
         `tmdb-${mediaType}-${item.id}.jpg`;
 
@@ -619,26 +680,31 @@ async function getOrUploadPoster(
               posterRes.headers.get(
                 "Content-Type"
               )
-              ||
-              "image/jpeg",
-          },
+              || "image/jpeg"
+          }
         }
       );
 
 
       return `/images/${key}`;
+
     }
 
-  } catch (err) {
+  }
+
+  catch (err) {
+
     console.log(
       "Poster fetch failed for",
       item.id,
       err
     );
+
   }
 
 
   return null;
+
 }
 
 
@@ -650,35 +716,39 @@ async function upsertFeaturedFromTop(
   extra,
   imageUrl
 ) {
+
   const year =
     movie.release_date
+
       ? Number(
           movie.release_date.slice(
             0,
             4
           )
         )
+
       : null;
 
 
   const rating =
-    typeof movie.vote_average ===
-    "number"
+    typeof movie.vote_average === "number"
+
       ? Math.round(
           movie.vote_average * 10
         ) / 10
+
       : null;
 
 
   const excerpt =
     (
       movie.overview
-      ||
-      ""
-    ).slice(
-      0,
-      300
-    );
+      || ""
+    )
+      .slice(
+        0,
+        300
+      );
 
 
   const postDate =
@@ -707,76 +777,89 @@ async function upsertFeaturedFromTop(
 
   const existing =
     await env.DB.prepare(
-      `
-      SELECT id
-      FROM posts
-      WHERE type = 'featured'
-      LIMIT 1
-      `
+      "SELECT id FROM posts WHERE type = 'featured' LIMIT 1"
     )
-    .first();
+      .first();
 
 
   if (existing) {
 
     await env.DB.prepare(
-      `
-      UPDATE posts
-      SET
-        title=?,
-        excerpt=?,
-        image=?,
-        score=?,
-        rating=?,
-        year=?,
-        post_date=?,
-        comments=?,
-        link=?,
-        genres=?,
-        runtime=?,
-        tagline=?,
-        backdrop=?,
-        trailer_key=?,
-        cast_names=?,
-        watch_providers=?,
-        watch_link=?,
-        media_type='movie',
-        industry=?,
-        original_language=?
-      WHERE id=?
-      `
+      `UPDATE posts
+       SET
+         title=?,
+         excerpt=?,
+         image=?,
+         score=?,
+         rating=?,
+         year=?,
+         post_date=?,
+         comments=?,
+         link=?,
+         genres=?,
+         runtime=?,
+         tagline=?,
+         backdrop=?,
+         trailer_key=?,
+         cast_names=?,
+         watch_providers=?,
+         watch_link=?,
+         media_type='movie',
+         industry=?,
+         original_language=?
+       WHERE id=?`
     )
-    .bind(
-      title,
-      excerpt,
-      imageUrl,
-      rating,
-      rating,
-      year,
-      postDate,
-      0,
-      link,
-      extra.genres,
-      extra.runtime,
-      extra.tagline,
-      extra.backdropUrl,
-      extra.trailerKey,
-      extra.castNames,
-      extra.watchProviders,
-      extra.watchLink,
-      industry,
-      movie.original_language
-      ||
-      null,
-      existing.id
-    )
-    .run();
+      .bind(
 
-  } else {
+        title,
+
+        excerpt,
+
+        imageUrl,
+
+        rating,
+
+        rating,
+
+        year,
+
+        postDate,
+
+        0,
+
+        link,
+
+        extra.genres,
+
+        extra.runtime,
+
+        extra.tagline,
+
+        extra.backdropUrl,
+
+        extra.trailerKey,
+
+        extra.castNames,
+
+        extra.watchProviders,
+
+        extra.watchLink,
+
+        industry,
+
+        movie.original_language || null,
+
+        existing.id
+
+      )
+      .run();
+
+  }
+
+  else {
 
     await env.DB.prepare(
-      `
-      INSERT INTO posts (
+      `INSERT INTO posts (
         type,
         title,
         excerpt,
@@ -801,54 +884,57 @@ async function upsertFeaturedFromTop(
       )
       VALUES (
         'featured',
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?,
         'movie',
-        ?,
-        ?
+        ?, ?
+      )`
+    )
+      .bind(
+
+        title,
+
+        excerpt,
+
+        imageUrl,
+
+        rating,
+
+        rating,
+
+        year,
+
+        postDate,
+
+        0,
+
+        link,
+
+        extra.genres,
+
+        extra.runtime,
+
+        extra.tagline,
+
+        extra.backdropUrl,
+
+        extra.trailerKey,
+
+        extra.castNames,
+
+        extra.watchProviders,
+
+        extra.watchLink,
+
+        industry,
+
+        movie.original_language || null
+
       )
-      `
-    )
-    .bind(
-      title,
-      excerpt,
-      imageUrl,
-      rating,
-      rating,
-      year,
-      postDate,
-      0,
-      link,
-      extra.genres,
-      extra.runtime,
-      extra.tagline,
-      extra.backdropUrl,
-      extra.trailerKey,
-      extra.castNames,
-      extra.watchProviders,
-      extra.watchLink,
-      industry,
-      movie.original_language
-      ||
-      null
-    )
-    .run();
+      .run();
+
   }
+
 }
 
 
@@ -857,33 +943,48 @@ async function upsertFeaturedFromTop(
 async function importTrendingFromTMDB(
   env
 ) {
+
   if (
     !env.TMDB_API_KEY
   ) {
+
     console.log(
       "TMDB_API_KEY not set — skipping scheduled import."
     );
+
     return;
+
   }
 
 
-  if (!env.DB) {
+  if (
+    !env.DB
+  ) {
+
     console.log(
       "D1 (DB) not bound — skipping scheduled import."
     );
+
     return;
+
   }
 
 
   const SOURCE_ENDPOINTS = [
+
     "https://api.themoviedb.org/3/trending/movie/day",
+
     "https://api.themoviedb.org/3/trending/movie/week",
+
     "https://api.themoviedb.org/3/movie/popular",
-    "https://api.themoviedb.org/3/movie/now_playing",
+
+    "https://api.themoviedb.org/3/movie/now_playing"
+
   ];
 
 
-  const PAGES_PER_SOURCE = 2;
+  const PAGES_PER_SOURCE =
+    2;
 
 
   const candidateMap =
@@ -895,8 +996,7 @@ async function importTrendingFromTMDB(
 
 
   for (
-    const base
-    of SOURCE_ENDPOINTS
+    const base of SOURCE_ENDPOINTS
   ) {
 
     for (
@@ -924,8 +1024,7 @@ async function importTrendingFromTMDB(
 
         const results =
           data.results
-          ||
-          [];
+          || [];
 
 
         if (
@@ -937,35 +1036,47 @@ async function importTrendingFromTMDB(
           &&
           results.length
         ) {
+
           trendingTop =
             results[0];
+
         }
 
 
         results.forEach(
           m => {
+
             if (
               !candidateMap.has(
                 m.id
               )
             ) {
+
               candidateMap.set(
                 m.id,
                 m
               );
+
             }
+
           }
         );
 
-      } catch (err) {
+      }
+
+      catch (err) {
+
         console.log(
           "Candidate fetch failed:",
           base,
           page,
           err
         );
+
       }
+
     }
+
   }
 
 
@@ -976,19 +1087,22 @@ async function importTrendingFromTMDB(
 
 
   if (!movies.length) {
+
     console.log(
       "No candidate movies fetched from TMDB."
     );
+
     return;
+
   }
 
 
-  let imported = 0;
+  let imported =
+    0;
 
 
   for (
-    const movie
-    of movies
+    const movie of movies
   ) {
 
     if (
@@ -1001,18 +1115,15 @@ async function importTrendingFromTMDB(
 
     const existing =
       await env.DB.prepare(
-        `
-        SELECT id
-        FROM posts
-        WHERE
-          tmdb_id = ?
-          AND media_type = 'movie'
-        `
+        `SELECT id
+         FROM posts
+         WHERE tmdb_id = ?
+         AND media_type = 'movie'`
       )
-      .bind(
-        movie.id
-      )
-      .first();
+        .bind(
+          movie.id
+        )
+        .first();
 
 
     if (existing) {
@@ -1038,33 +1149,36 @@ async function importTrendingFromTMDB(
 
     const year =
       movie.release_date
+
         ? Number(
             movie.release_date.slice(
               0,
               4
             )
           )
+
         : null;
 
 
     const rating =
-      typeof movie.vote_average ===
-      "number"
+      typeof movie.vote_average === "number"
+
         ? Math.round(
             movie.vote_average * 10
           ) / 10
+
         : null;
 
 
     const excerpt =
       (
         movie.overview
-        ||
-        ""
-      ).slice(
-        0,
-        300
-      );
+        || ""
+      )
+        .slice(
+          0,
+          300
+        );
 
 
     const industry =
@@ -1074,8 +1188,7 @@ async function importTrendingFromTMDB(
 
 
     await env.DB.prepare(
-      `
-      INSERT INTO posts (
+      `INSERT INTO posts (
         type,
         title,
         excerpt,
@@ -1100,66 +1213,68 @@ async function importTrendingFromTMDB(
         original_language
       )
       VALUES (
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
         'movie',
-        ?,
-        ?
+        ?, ?
+      )`
+    )
+      .bind(
+
+        TMDB_POST_TYPE,
+
+        movie.title
+        ||
+        movie.original_title
+        ||
+        "Untitled",
+
+        excerpt,
+
+        imageUrl,
+
+        rating,
+
+        rating,
+
+        year,
+
+        formatPostDate(
+          new Date()
+        ),
+
+        0,
+
+        `https://www.themoviedb.org/movie/${movie.id}`,
+
+        movie.id,
+
+        extra.genres,
+
+        extra.runtime,
+
+        extra.tagline,
+
+        extra.backdropUrl,
+
+        extra.trailerKey,
+
+        extra.castNames,
+
+        extra.watchProviders,
+
+        extra.watchLink,
+
+        industry,
+
+        movie.original_language || null
+
       )
-      `
-    )
-    .bind(
-      TMDB_POST_TYPE,
-      movie.title
-      ||
-      movie.original_title
-      ||
-      "Untitled",
-      excerpt,
-      imageUrl,
-      rating,
-      rating,
-      year,
-      formatPostDate(
-        new Date()
-      ),
-      0,
-      `https://www.themoviedb.org/movie/${movie.id}`,
-      movie.id,
-      extra.genres,
-      extra.runtime,
-      extra.tagline,
-      extra.backdropUrl,
-      extra.trailerKey,
-      extra.castNames,
-      extra.watchProviders,
-      extra.watchLink,
-      industry,
-      movie.original_language
-      ||
-      null
-    )
-    .run();
+      .run();
 
 
     imported++;
+
   }
 
 
@@ -1193,16 +1308,18 @@ async function importTrendingFromTMDB(
       topExtra,
       topImage
     );
+
   }
 
 
   console.log(
     `TMDB import finished: ${imported} new post(s) added.`
   );
+
 }
 
 
-// ---------- TV Import ----------
+// ---------- TV Shows import ----------
 
 async function importTVFromTMDB(
   env
@@ -1210,31 +1327,28 @@ async function importTVFromTMDB(
 
   if (
     !env.TMDB_API_KEY
+    ||
+    !env.DB
   ) {
-    console.log(
-      "TMDB_API_KEY not set — skipping TV import."
-    );
-    return;
-  }
-
-
-  if (!env.DB) {
-    console.log(
-      "D1 (DB) not bound — skipping TV import."
-    );
     return;
   }
 
 
   const SOURCE_ENDPOINTS = [
+
     "https://api.themoviedb.org/3/trending/tv/day",
+
     "https://api.themoviedb.org/3/trending/tv/week",
+
     "https://api.themoviedb.org/3/tv/popular",
-    "https://api.themoviedb.org/3/tv/top_rated",
+
+    "https://api.themoviedb.org/3/tv/top_rated"
+
   ];
 
 
-  const PAGES_PER_SOURCE = 2;
+  const PAGES_PER_SOURCE =
+    2;
 
 
   const candidateMap =
@@ -1242,8 +1356,7 @@ async function importTVFromTMDB(
 
 
   for (
-    const base
-    of SOURCE_ENDPOINTS
+    const base of SOURCE_ENDPOINTS
   ) {
 
     for (
@@ -1271,34 +1384,42 @@ async function importTVFromTMDB(
 
         (
           data.results
-          ||
-          []
-        ).forEach(
-          s => {
+          || []
+        )
+          .forEach(
+            s => {
 
-            if (
-              !candidateMap.has(
-                s.id
-              )
-            ) {
-              candidateMap.set(
-                s.id,
-                s
-              );
+              if (
+                !candidateMap.has(
+                  s.id
+                )
+              ) {
+
+                candidateMap.set(
+                  s.id,
+                  s
+                );
+
+              }
+
             }
+          );
 
-          }
-        );
+      }
 
-      } catch (err) {
+      catch (err) {
+
         console.log(
           "TV candidate fetch failed:",
           base,
           page,
           err
         );
+
       }
+
     }
+
   }
 
 
@@ -1309,19 +1430,16 @@ async function importTVFromTMDB(
 
 
   if (!shows.length) {
-    console.log(
-      "No candidate TV shows fetched from TMDB."
-    );
     return;
   }
 
 
-  let imported = 0;
+  let imported =
+    0;
 
 
   for (
-    const show
-    of shows
+    const show of shows
   ) {
 
     if (
@@ -1334,18 +1452,15 @@ async function importTVFromTMDB(
 
     const existing =
       await env.DB.prepare(
-        `
-        SELECT id
-        FROM posts
-        WHERE
-          tmdb_id = ?
-          AND media_type = 'tv'
-        `
+        `SELECT id
+         FROM posts
+         WHERE tmdb_id = ?
+         AND media_type = 'tv'`
       )
-      .bind(
-        show.id
-      )
-      .first();
+        .bind(
+          show.id
+        )
+        .first();
 
 
     if (existing) {
@@ -1371,33 +1486,36 @@ async function importTVFromTMDB(
 
     const year =
       show.first_air_date
+
         ? Number(
             show.first_air_date.slice(
               0,
               4
             )
           )
+
         : null;
 
 
     const rating =
-      typeof show.vote_average ===
-      "number"
+      typeof show.vote_average === "number"
+
         ? Math.round(
             show.vote_average * 10
           ) / 10
+
         : null;
 
 
     const excerpt =
       (
         show.overview
-        ||
-        ""
-      ).slice(
-        0,
-        300
-      );
+        || ""
+      )
+        .slice(
+          0,
+          300
+        );
 
 
     const title =
@@ -1415,8 +1533,7 @@ async function importTVFromTMDB(
 
 
     await env.DB.prepare(
-      `
-      INSERT INTO posts (
+      `INSERT INTO posts (
         type,
         title,
         excerpt,
@@ -1442,66 +1559,69 @@ async function importTVFromTMDB(
       )
       VALUES (
         'movie',
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
         'tv',
-        ?,
-        ?
+        ?, ?
+      )`
+    )
+      .bind(
+
+        title,
+
+        excerpt,
+
+        imageUrl,
+
+        rating,
+
+        rating,
+
+        year,
+
+        formatPostDate(
+          new Date()
+        ),
+
+        0,
+
+        `https://www.themoviedb.org/tv/${show.id}`,
+
+        show.id,
+
+        extra.genres,
+
+        extra.runtime,
+
+        extra.tagline,
+
+        extra.backdropUrl,
+
+        extra.trailerKey,
+
+        extra.castNames,
+
+        extra.watchProviders,
+
+        extra.watchLink,
+
+        industry,
+
+        show.original_language || null
+
       )
-      `
-    )
-    .bind(
-      title,
-      excerpt,
-      imageUrl,
-      rating,
-      rating,
-      year,
-      formatPostDate(
-        new Date()
-      ),
-      0,
-      `https://www.themoviedb.org/tv/${show.id}`,
-      show.id,
-      extra.genres,
-      extra.runtime,
-      extra.tagline,
-      extra.backdropUrl,
-      extra.trailerKey,
-      extra.castNames,
-      extra.watchProviders,
-      extra.watchLink,
-      industry,
-      show.original_language
-      ||
-      null
-    )
-    .run();
+      .run();
 
 
     imported++;
+
   }
 
 
   console.log(
     `TMDB TV import finished: ${imported} new show(s) added.`
   );
+
 }
 
 
@@ -1561,7 +1681,8 @@ const CLEAN_ROUTES = {
     "/admin.html",
 
   "/search":
-    "/search.html",
+    "/search.html"
+
 };
 
 
@@ -1572,10 +1693,12 @@ function rewriteCleanUrl(
 
   const path =
     url.pathname.length > 1
+
       ? url.pathname.replace(
           /\/$/,
           ""
         )
+
       : url.pathname;
 
 
@@ -1596,6 +1719,7 @@ function rewriteCleanUrl(
       target.toString(),
       request
     );
+
   }
 
 
@@ -1618,6 +1742,7 @@ function rewriteCleanUrl(
       target.toString(),
       request
     );
+
   }
 
 
@@ -1640,6 +1765,7 @@ function rewriteCleanUrl(
       target.toString(),
       request
     );
+
   }
 
 
@@ -1662,6 +1788,7 @@ function rewriteCleanUrl(
       target.toString(),
       request
     );
+
   }
 
 
@@ -1684,10 +1811,12 @@ function rewriteCleanUrl(
       target.toString(),
       request
     );
+
   }
 
 
   return null;
+
 }
 
 
@@ -1699,12 +1828,11 @@ async function handleApi(
   url
 ) {
 
-  const {
-    pathname,
-  } = url;
+  const { pathname } =
+    url;
 
 
-  // ---------- Auth ----------
+  // ---------- Login ----------
 
   if (
     pathname === "/api/login"
@@ -1722,15 +1850,17 @@ async function handleApi(
     if (
       !env.ADMIN_PASSWORD
     ) {
+
       return json(
         {
           error:
-            "Server is missing ADMIN_PASSWORD secret.",
+            "Server is missing ADMIN_PASSWORD secret."
         },
         {
-          status: 500,
+          status: 500
         }
       );
+
     }
 
 
@@ -1738,15 +1868,17 @@ async function handleApi(
       body.password !==
       env.ADMIN_PASSWORD
     ) {
+
       return json(
         {
           error:
-            "Wrong password.",
+            "Wrong password."
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
@@ -1758,17 +1890,20 @@ async function handleApi(
 
     return json(
       {
-        ok: true,
+        ok: true
       },
       {
         headers: {
           "Set-Cookie":
-            `admin_session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=604800`,
-        },
+            `admin_session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=604800`
+        }
       }
     );
+
   }
 
+
+  // ---------- Logout ----------
 
   if (
     pathname === "/api/logout"
@@ -1778,17 +1913,20 @@ async function handleApi(
 
     return json(
       {
-        ok: true,
+        ok: true
       },
       {
         headers: {
           "Set-Cookie":
-            "admin_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0",
-        },
+            "admin_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"
+        }
       }
     );
+
   }
 
+
+  // ---------- Current user ----------
 
   if (
     pathname === "/api/me"
@@ -1803,14 +1941,17 @@ async function handleApi(
       );
 
 
-    return json({
-      authenticated:
-        ok,
-    });
+    return json(
+      {
+        authenticated:
+          ok
+      }
+    );
+
   }
 
 
-  // ---------- Image upload ----------
+  // ---------- Upload image ----------
 
   if (
     pathname === "/api/upload"
@@ -1826,30 +1967,34 @@ async function handleApi(
         )
       )
     ) {
+
       return json(
         {
           error:
-            "Unauthorized",
+            "Unauthorized"
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
     if (
       !env.IMAGES
     ) {
+
       return json(
         {
           error:
-            "Image storage (R2) isn't set up yet. See README.md.",
+            "Image storage (R2) isn't set up yet."
         },
         {
-          status: 500,
+          status: 500
         }
       );
+
     }
 
 
@@ -1871,15 +2016,17 @@ async function handleApi(
       ||
       typeof file === "string"
     ) {
+
       return json(
         {
           error:
-            "No file received.",
+            "No file received."
         },
         {
-          status: 400,
+          status: 400
         }
       );
+
     }
 
 
@@ -1890,15 +2037,17 @@ async function handleApi(
         "image/"
       )
     ) {
+
       return json(
         {
           error:
-            "Only image files are allowed.",
+            "Only image files are allowed."
         },
         {
-          status: 400,
+          status: 400
         }
       );
+
     }
 
 
@@ -1906,15 +2055,17 @@ async function handleApi(
       file.size >
       MAX_UPLOAD_BYTES
     ) {
+
       return json(
         {
           error:
-            "Image is larger than 5MB.",
+            "Image is larger than 5MB."
         },
         {
-          status: 400,
+          status: 400
         }
       );
+
     }
 
 
@@ -1930,20 +2081,23 @@ async function handleApi(
       {
         httpMetadata: {
           contentType:
-            file.type,
-        },
+            file.type
+        }
       }
     );
 
 
-    return json({
-      url:
-        `/images/${key}`,
-    });
+    return json(
+      {
+        url:
+          `/images/${key}`
+      }
+    );
+
   }
 
 
-  // ---------- TMDB manual import ----------
+  // ---------- Manual movie import ----------
 
   if (
     pathname === "/api/import-tmdb"
@@ -1959,15 +2113,17 @@ async function handleApi(
         )
       )
     ) {
+
       return json(
         {
           error:
-            "Unauthorized",
+            "Unauthorized"
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
@@ -1976,17 +2132,19 @@ async function handleApi(
     );
 
 
-    return json({
-      ok: true,
-    });
+    return json(
+      {
+        ok: true
+      }
+    );
+
   }
 
 
-  // ---------- TV manual import ----------
+  // ---------- Manual TV import ----------
 
   if (
-    pathname ===
-      "/api/import-tmdb-tv"
+    pathname === "/api/import-tmdb-tv"
     &&
     request.method === "POST"
   ) {
@@ -1999,15 +2157,17 @@ async function handleApi(
         )
       )
     ) {
+
       return json(
         {
           error:
-            "Unauthorized",
+            "Unauthorized"
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
@@ -2016,17 +2176,19 @@ async function handleApi(
     );
 
 
-    return json({
-      ok: true,
-    });
+    return json(
+      {
+        ok: true
+      }
+    );
+
   }
 
 
   // ---------- Backfill ----------
 
   if (
-    pathname ===
-      "/api/backfill-tmdb"
+    pathname === "/api/backfill-tmdb"
     &&
     request.method === "POST"
   ) {
@@ -2039,15 +2201,17 @@ async function handleApi(
         )
       )
     ) {
+
       return json(
         {
           error:
-            "Unauthorized",
+            "Unauthorized"
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
@@ -2058,10 +2222,13 @@ async function handleApi(
       );
 
 
-    return json({
-      ok: true,
-      ...result,
-    });
+    return json(
+      {
+        ok: true,
+        ...result
+      }
+    );
+
   }
 
 
@@ -2075,18 +2242,20 @@ async function handleApi(
 
     const q =
       (
-        url.searchParams.get(
-          "q"
-        )
-        ||
-        ""
-      ).trim();
+        url.searchParams.get("q")
+        || ""
+      )
+        .trim();
 
 
     if (!q) {
-      return json({
-        posts: [],
-      });
+
+      return json(
+        {
+          posts: []
+        }
+      );
+
     }
 
 
@@ -2096,38 +2265,38 @@ async function handleApi(
 
     const { results } =
       await env.DB.prepare(
-        `
-        SELECT *
-        FROM posts
-        WHERE
-          type IN (
-            'movie',
-            'review',
-            'article'
-          )
-          AND (
-            title LIKE ?
-            OR excerpt LIKE ?
-            OR genres LIKE ?
-            OR cast_names LIKE ?
-          )
-        ORDER BY id DESC
-        LIMIT 40
-        `
+        `SELECT *
+         FROM posts
+         WHERE type IN (
+           'movie',
+           'review',
+           'article'
+         )
+         AND (
+           title LIKE ?
+           OR excerpt LIKE ?
+           OR genres LIKE ?
+           OR cast_names LIKE ?
+         )
+         ORDER BY id DESC
+         LIMIT 40`
       )
-      .bind(
-        like,
-        like,
-        like,
-        like
-      )
-      .all();
+        .bind(
+          like,
+          like,
+          like,
+          like
+        )
+        .all();
 
 
-    return json({
-      posts:
-        results,
-    });
+    return json(
+      {
+        posts:
+          results
+      }
+    );
+
   }
 
 
@@ -2149,11 +2318,10 @@ async function handleApi(
     const email =
       (
         b.email
-        ||
-        ""
+        || ""
       )
-      .trim()
-      .toLowerCase();
+        .trim()
+        .toLowerCase();
 
 
     const validEmail =
@@ -2163,37 +2331,34 @@ async function handleApi(
         );
 
 
-    if (
-      !validEmail
-    ) {
+    if (!validEmail) {
+
       return json(
         {
           error:
-            "Please enter a valid email address.",
+            "Please enter a valid email address."
         },
         {
-          status: 400,
+          status: 400
         }
       );
+
     }
 
 
     try {
 
       await env.DB.prepare(
-        `
-        INSERT INTO subscribers (
+        "INSERT INTO subscribers (email) VALUES (?)"
+      )
+        .bind(
           email
         )
-        VALUES (?)
-        `
-      )
-      .bind(
-        email
-      )
-      .run();
+        .run();
 
-    } catch (err) {
+    }
+
+    catch (err) {
 
       if (
         !String(err)
@@ -2201,30 +2366,35 @@ async function handleApi(
             "UNIQUE"
           )
       ) {
+
         return json(
           {
             error:
-              "Could not save your subscription.",
+              "Could not save your subscription."
           },
           {
-            status: 500,
+            status: 500
           }
         );
+
       }
+
     }
 
 
-    return json({
-      ok: true,
-    });
+    return json(
+      {
+        ok: true
+      }
+    );
+
   }
 
 
-  // ---------- TMDB Search ----------
+  // ---------- TMDB search ----------
 
   if (
-    pathname ===
-      "/api/tmdb-search"
+    pathname === "/api/tmdb-search"
     &&
     request.method === "GET"
   ) {
@@ -2237,55 +2407,63 @@ async function handleApi(
         )
       )
     ) {
+
       return json(
         {
           error:
-            "Unauthorized",
+            "Unauthorized"
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
     if (
       !env.TMDB_API_KEY
     ) {
+
       return json(
         {
           error:
-            "TMDB_API_KEY isn't set.",
+            "TMDB_API_KEY isn't set."
         },
         {
-          status: 500,
+          status: 500
         }
       );
+
     }
 
 
     const q =
       (
-        url.searchParams.get(
-          "q"
-        )
-        ||
-        ""
-      ).trim();
+        url.searchParams.get("q")
+        || ""
+      )
+        .trim();
 
 
     const media =
       url.searchParams.get(
         "media"
       ) === "tv"
+
         ? "tv"
+
         : "movie";
 
 
     if (!q) {
-      return json({
-        results: [],
-      });
+
+      return json(
+        {
+          results: []
+        }
+      );
+
     }
 
 
@@ -2295,18 +2473,18 @@ async function handleApi(
       );
 
 
-    if (
-      !res.ok
-    ) {
+    if (!res.ok) {
+
       return json(
         {
           error:
-            "TMDB search failed.",
+            "TMDB search failed."
         },
         {
-          status: 502,
+          status: 502
         }
       );
+
     }
 
 
@@ -2317,69 +2495,77 @@ async function handleApi(
     const results =
       (
         data.results
-        ||
-        []
+        || []
       )
-      .slice(
-        0,
-        12
-      )
-      .map(
-        m => ({
-          tmdb_id:
-            m.id,
+        .slice(
+          0,
+          12
+        )
+        .map(
+          m => ({
 
-          media_type:
-            media,
+            tmdb_id:
+              m.id,
 
-          title:
-            media === "tv"
-              ? (
-                  m.name
-                  ||
-                  m.original_name
-                )
-              : (
-                  m.title
-                  ||
-                  m.original_title
-                ),
+            media_type:
+              media,
 
-          year:
-            (
+            title:
               media === "tv"
-                ? m.first_air_date
-                : m.release_date
-            )
-            ?.slice(
-              0,
-              4
-            )
-            ||
-            null,
 
-          poster:
-            m.poster_path
-              ? `https://image.tmdb.org/t/p/w200${m.poster_path}`
-              : null,
+                ? (
+                    m.name
+                    ||
+                    m.original_name
+                  )
 
-          rating:
-            m.vote_average,
-        })
-      );
+                : (
+                    m.title
+                    ||
+                    m.original_title
+                  ),
+
+            year:
+              (
+                media === "tv"
+
+                  ? m.first_air_date
+
+                  : m.release_date
+              )
+                ?.slice(
+                  0,
+                  4
+                )
+              || null,
+
+            poster:
+              m.poster_path
+
+                ? `https://image.tmdb.org/t/p/w200${m.poster_path}`
+
+                : null,
+
+            rating:
+              m.vote_average
+
+          })
+        );
 
 
-    return json({
-      results,
-    });
+    return json(
+      {
+        results
+      }
+    );
+
   }
 
 
-  // ---------- One-off TMDB Import ----------
+  // ---------- TMDB one-off import ----------
 
   if (
-    pathname ===
-      "/api/tmdb-import"
+    pathname === "/api/tmdb-import"
     &&
     request.method === "POST"
   ) {
@@ -2392,30 +2578,34 @@ async function handleApi(
         )
       )
     ) {
+
       return json(
         {
           error:
-            "Unauthorized",
+            "Unauthorized"
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
     if (
       !env.TMDB_API_KEY
     ) {
+
       return json(
         {
           error:
-            "TMDB_API_KEY isn't set.",
+            "TMDB_API_KEY isn't set."
         },
         {
-          status: 500,
+          status: 500
         }
       );
+
     }
 
 
@@ -2434,49 +2624,52 @@ async function handleApi(
 
     const media =
       b.media_type === "tv"
+
         ? "tv"
+
         : "movie";
 
 
-    if (
-      !tmdbId
-    ) {
+    if (!tmdbId) {
+
       return json(
         {
           error:
-            "tmdb_id is required.",
+            "tmdb_id is required."
         },
         {
-          status: 400,
+          status: 400
         }
       );
+
     }
 
 
     const already =
       await env.DB.prepare(
-        `
-        SELECT id
-        FROM posts
-        WHERE
-          tmdb_id = ?
-          AND media_type = ?
-        `
+        `SELECT id
+         FROM posts
+         WHERE tmdb_id = ?
+         AND media_type = ?`
       )
-      .bind(
-        tmdbId,
-        media
-      )
-      .first();
+        .bind(
+          tmdbId,
+          media
+        )
+        .first();
 
 
     if (already) {
-      return json({
-        ok: true,
-        alreadyImported: true,
-        id:
-          already.id,
-      });
+
+      return json(
+        {
+          ok: true,
+          alreadyImported: true,
+          id:
+            already.id
+        }
+      );
+
     }
 
 
@@ -2486,18 +2679,18 @@ async function handleApi(
       );
 
 
-    if (
-      !itemRes.ok
-    ) {
+    if (!itemRes.ok) {
+
       return json(
         {
           error:
-            `Could not fetch this ${media} from TMDB.`,
+            `Could not fetch this ${media} from TMDB.`
         },
         {
-          status: 502,
+          status: 502
         }
       );
+
     }
 
 
@@ -2523,48 +2716,55 @@ async function handleApi(
 
     const dateField =
       media === "tv"
+
         ? item.first_air_date
+
         : item.release_date;
 
 
     const year =
       dateField
+
         ? Number(
             dateField.slice(
               0,
               4
             )
           )
+
         : null;
 
 
     const rating =
-      typeof item.vote_average ===
-      "number"
+      typeof item.vote_average === "number"
+
         ? Math.round(
             item.vote_average * 10
           ) / 10
+
         : null;
 
 
     const excerpt =
       (
         item.overview
-        ||
-        ""
-      ).slice(
-        0,
-        300
-      );
+        || ""
+      )
+        .slice(
+          0,
+          300
+        );
 
 
     const title =
       media === "tv"
+
         ? (
             item.name
             ||
             item.original_name
           )
+
         : (
             item.title
             ||
@@ -2580,8 +2780,7 @@ async function handleApi(
 
     const result =
       await env.DB.prepare(
-        `
-        INSERT INTO posts (
+        `INSERT INTO posts (
           type,
           title,
           excerpt,
@@ -2607,93 +2806,75 @@ async function handleApi(
         )
         VALUES (
           'movie',
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?
+        )`
+      )
+        .bind(
+
+          title || "Untitled",
+
+          excerpt,
+
+          imageUrl,
+
+          rating,
+
+          rating,
+
+          year,
+
+          formatPostDate(
+            new Date()
+          ),
+
+          0,
+
+          `https://www.themoviedb.org/${media}/${tmdbId}`,
+
+          tmdbId,
+
+          extra.genres,
+
+          extra.runtime,
+
+          extra.tagline,
+
+          extra.backdropUrl,
+
+          extra.trailerKey,
+
+          extra.castNames,
+
+          extra.watchProviders,
+
+          extra.watchLink,
+
+          media,
+
+          industry,
+
+          item.original_language
+          || null
+
         )
-        `
-      )
-      .bind(
-        title
-        ||
-        "Untitled",
-
-        excerpt,
-
-        imageUrl,
-
-        rating,
-
-        rating,
-
-        year,
-
-        formatPostDate(
-          new Date()
-        ),
-
-        0,
-
-        `https://www.themoviedb.org/${media}/${tmdbId}`,
-
-        tmdbId,
-
-        extra.genres,
-
-        extra.runtime,
-
-        extra.tagline,
-
-        extra.backdropUrl,
-
-        extra.trailerKey,
-
-        extra.castNames,
-
-        extra.watchProviders,
-
-        extra.watchLink,
-
-        media,
-
-        industry,
-
-        item.original_language
-        ||
-        null
-      )
-      .run();
+        .run();
 
 
-    return json({
-      ok: true,
-      id:
-        result.meta
-          .last_row_id,
-    });
+    return json(
+      {
+        ok: true,
+        id:
+          result.meta.last_row_id
+      }
+    );
+
   }
 
 
   // ==================================================
-  // POSTS API WITH REAL PAGINATION
+  // POSTS API WITH PAGINATION
   // ==================================================
 
   if (
@@ -2720,56 +2901,63 @@ async function handleApi(
       );
 
 
-    // Current page
+    // Pagination
 
-    const requestedPage =
-      Math.max(
-        Number(
-          url.searchParams.get(
-            "page"
-          )
-          ||
-          1
-        ),
-        1
+    const requestedLimit =
+      Number(
+        url.searchParams.get(
+          "limit"
+        )
+        || 20
       );
 
-
-    // Items per page
 
     const limit =
       Math.min(
         Math.max(
-          Number(
-            url.searchParams.get(
-              "limit"
-            )
-            ||
-            24
-          ),
+          requestedLimit,
           1
         ),
         100
       );
 
 
+    const requestedOffset =
+      Number(
+        url.searchParams.get(
+          "offset"
+        )
+        || 0
+      );
+
+
+    const offset =
+      Math.max(
+        requestedOffset,
+        0
+      );
+
+
     // Sorting
+    // id DESC is used because your D1
+    // database may not have created_at.
 
     const orderBy =
       sort === "rating"
-        ? `
-          ORDER BY
-            rating DESC,
-            id DESC
-          `
-        : `
-          ORDER BY
-            id DESC
-          `;
+
+        ? "ORDER BY rating DESC, id DESC"
+
+        : "ORDER BY id DESC";
 
 
-    const conditions = [];
-    const params = [];
+    // Filters
+
+    const conditions =
+      [];
+
+
+    const params =
+      [];
 
 
     if (type) {
@@ -2781,6 +2969,7 @@ async function handleApi(
       params.push(
         type
       );
+
     }
 
 
@@ -2793,28 +2982,29 @@ async function handleApi(
       params.push(
         media
       );
+
     }
 
 
     const where =
       conditions.length
+
         ? `WHERE ${conditions.join(" AND ")}`
+
         : "";
 
 
-    // ---------- Total count ----------
+    // Total count
 
     const countStmt =
       env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total
-        FROM posts
-        ${where}
-        `
+        `SELECT COUNT(*) AS total
+         FROM posts
+         ${where}`
       )
-      .bind(
-        ...params
-      );
+        .bind(
+          ...params
+        );
 
 
     const countResult =
@@ -2824,86 +3014,51 @@ async function handleApi(
     const total =
       Number(
         countResult?.total
-        ||
-        0
+        || 0
       );
 
 
-    const totalPages =
-      total > 0
-        ? Math.ceil(
-            total / limit
-          )
-        : 1;
-
-
-    // Safe page
-
-    const page =
-      Math.min(
-        requestedPage,
-        totalPages
-      );
-
-
-    const offset =
-      (
-        page - 1
-      )
-      *
-      limit;
-
-
-    // ---------- Paginated posts ----------
+    // Current page
 
     const postsStmt =
       env.DB.prepare(
-        `
-        SELECT *
-        FROM posts
-        ${where}
-        ${orderBy}
-        LIMIT ?
-        OFFSET ?
-        `
+        `SELECT *
+         FROM posts
+         ${where}
+         ${orderBy}
+         LIMIT ?
+         OFFSET ?`
       )
-      .bind(
-        ...params,
-        limit,
-        offset
-      );
+        .bind(
+          ...params,
+          limit,
+          offset
+        );
 
 
-    const {
-      results,
-    } =
+    const { results } =
       await postsStmt.all();
 
 
-    return json({
+    return json(
+      {
 
-      posts:
-        results,
+        posts:
+          results
+          || [],
 
-      pagination: {
+        total:
+          total,
 
-        page,
+        limit:
+          limit,
 
-        limit,
+        offset:
+          offset
 
-        total,
+      }
+    );
 
-        totalPages,
-
-        hasNextPage:
-          page < totalPages,
-
-        hasPreviousPage:
-          page > 1,
-
-      },
-
-    });
   }
 
 
@@ -2923,15 +3078,17 @@ async function handleApi(
         )
       )
     ) {
+
       return json(
         {
           error:
-            "Unauthorized",
+            "Unauthorized"
         },
         {
-          status: 401,
+          status: 401
         }
       );
+
     }
 
 
@@ -2949,22 +3106,23 @@ async function handleApi(
         b.type
       )
     ) {
+
       return json(
         {
           error:
-            "title and a valid type are required.",
+            "title and a valid type are required."
         },
         {
-          status: 400,
+          status: 400
         }
       );
+
     }
 
 
     const result =
       await env.DB.prepare(
-        `
-        INSERT INTO posts (
+        `INSERT INTO posts (
           type,
           title,
           excerpt,
@@ -2985,105 +3143,76 @@ async function handleApi(
           watch_link
         )
         VALUES (
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?,
-          ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?
+        )`
+      )
+        .bind(
+
+          b.type,
+
+          b.title,
+
+          b.excerpt
+          || null,
+
+          b.image
+          || null,
+
+          b.score
+          ?? null,
+
+          b.rating
+          ?? null,
+
+          b.year
+          ?? null,
+
+          b.post_date
+          || null,
+
+          b.comments
+          ?? 0,
+
+          b.link
+          || null,
+
+          b.genres
+          || null,
+
+          b.runtime
+          ?? null,
+
+          b.tagline
+          || null,
+
+          b.backdrop
+          || null,
+
+          b.trailer_key
+          || null,
+
+          b.cast_names
+          || null,
+
+          b.watch_providers
+          || null,
+
+          b.watch_link
+          || null
+
         )
-        `
-      )
-      .bind(
-        b.type,
-
-        b.title,
-
-        b.excerpt
-        ||
-        null,
-
-        b.image
-        ||
-        null,
-
-        b.score
-        ??
-        null,
-
-        b.rating
-        ??
-        null,
-
-        b.year
-        ??
-        null,
-
-        b.post_date
-        ||
-        null,
-
-        b.comments
-        ??
-        0,
-
-        b.link
-        ||
-        null,
-
-        b.genres
-        ||
-        null,
-
-        b.runtime
-        ??
-        null,
-
-        b.tagline
-        ||
-        null,
-
-        b.backdrop
-        ||
-        null,
-
-        b.trailer_key
-        ||
-        null,
-
-        b.cast_names
-        ||
-        null,
-
-        b.watch_providers
-        ||
-        null,
-
-        b.watch_link
-        ||
-        null
-      )
-      .run();
+        .run();
 
 
-    return json({
-      ok: true,
-      id:
-        result.meta
-          .last_row_id,
-    });
+    return json(
+      {
+        ok: true,
+        id:
+          result.meta.last_row_id
+      }
+    );
+
   }
 
 
@@ -3095,9 +3224,7 @@ async function handleApi(
     );
 
 
-  if (
-    singleMatch
-  ) {
+  if (singleMatch) {
 
     const id =
       Number(
@@ -3113,34 +3240,35 @@ async function handleApi(
 
       const post =
         await env.DB.prepare(
-          `
-          SELECT *
-          FROM posts
-          WHERE id = ?
-          `
+          "SELECT * FROM posts WHERE id = ?"
         )
-        .bind(
-          id
-        )
-        .first();
+          .bind(
+            id
+          )
+          .first();
 
 
       if (!post) {
+
         return json(
           {
             error:
-              "Not found",
+              "Not found"
           },
           {
-            status: 404,
+            status: 404
           }
         );
+
       }
 
 
-      return json({
-        post,
-      });
+      return json(
+        {
+          post
+        }
+      );
+
     }
 
 
@@ -3158,15 +3286,17 @@ async function handleApi(
           )
         )
       ) {
+
         return json(
           {
             error:
-              "Unauthorized",
+              "Unauthorized"
           },
           {
-            status: 401,
+            status: 401
           }
         );
+
       }
 
 
@@ -3184,120 +3314,109 @@ async function handleApi(
           b.type
         )
       ) {
+
         return json(
           {
             error:
-              "title and a valid type are required.",
+              "title and a valid type are required."
           },
           {
-            status: 400,
+            status: 400
           }
         );
+
       }
 
 
       await env.DB.prepare(
-        `
-        UPDATE posts
-        SET
-          type=?,
-          title=?,
-          excerpt=?,
-          image=?,
-          score=?,
-          rating=?,
-          year=?,
-          post_date=?,
-          comments=?,
-          link=?,
-          genres=?,
-          runtime=?,
-          tagline=?,
-          backdrop=?,
-          trailer_key=?,
-          cast_names=?,
-          watch_providers=?,
-          watch_link=?
-        WHERE id=?
-        `
+        `UPDATE posts
+         SET
+           type=?,
+           title=?,
+           excerpt=?,
+           image=?,
+           score=?,
+           rating=?,
+           year=?,
+           post_date=?,
+           comments=?,
+           link=?,
+           genres=?,
+           runtime=?,
+           tagline=?,
+           backdrop=?,
+           trailer_key=?,
+           cast_names=?,
+           watch_providers=?,
+           watch_link=?
+         WHERE id=?`
       )
-      .bind(
-        b.type,
+        .bind(
 
-        b.title,
+          b.type,
 
-        b.excerpt
-        ||
-        null,
+          b.title,
 
-        b.image
-        ||
-        null,
+          b.excerpt
+          || null,
 
-        b.score
-        ??
-        null,
+          b.image
+          || null,
 
-        b.rating
-        ??
-        null,
+          b.score
+          ?? null,
 
-        b.year
-        ??
-        null,
+          b.rating
+          ?? null,
 
-        b.post_date
-        ||
-        null,
+          b.year
+          ?? null,
 
-        b.comments
-        ??
-        0,
+          b.post_date
+          || null,
 
-        b.link
-        ||
-        null,
+          b.comments
+          ?? 0,
 
-        b.genres
-        ||
-        null,
+          b.link
+          || null,
 
-        b.runtime
-        ??
-        null,
+          b.genres
+          || null,
 
-        b.tagline
-        ||
-        null,
+          b.runtime
+          ?? null,
 
-        b.backdrop
-        ||
-        null,
+          b.tagline
+          || null,
 
-        b.trailer_key
-        ||
-        null,
+          b.backdrop
+          || null,
 
-        b.cast_names
-        ||
-        null,
+          b.trailer_key
+          || null,
 
-        b.watch_providers
-        ||
-        null,
+          b.cast_names
+          || null,
 
-        b.watch_link
-        ||
-        null,
+          b.watch_providers
+          || null,
 
-        id
-      )
-      .run();
+          b.watch_link
+          || null,
+
+          id
+
+        )
+        .run();
 
 
-      return json({
-        ok: true,
-      });
+      return json(
+        {
+          ok: true
+        }
+      );
+
     }
 
 
@@ -3315,52 +3434,54 @@ async function handleApi(
           )
         )
       ) {
+
         return json(
           {
             error:
-              "Unauthorized",
+              "Unauthorized"
           },
           {
-            status: 401,
+            status: 401
           }
         );
+
       }
 
 
       await env.DB.prepare(
-        `
-        DELETE FROM posts
-        WHERE id = ?
-        `
+        "DELETE FROM posts WHERE id = ?"
       )
-      .bind(
-        id
-      )
-      .run();
+        .bind(
+          id
+        )
+        .run();
 
 
-      return json({
-        ok: true,
-      });
+      return json(
+        {
+          ok: true
+        }
+      );
+
     }
+
   }
 
 
   return json(
     {
       error:
-        "Not found",
+        "Not found"
     },
     {
-      status: 404,
+      status: 404
     }
   );
+
 }
 
 
-// ==================================================
-// WORKER
-// ==================================================
+// ---------- Worker ----------
 
 export default {
 
@@ -3390,18 +3511,22 @@ export default {
           url
         );
 
-      } catch (err) {
+      }
+
+      catch (err) {
 
         return json(
           {
             error:
-              String(err),
+              String(err)
           },
           {
-            status: 500,
+            status: 500
           }
         );
+
       }
+
     }
 
 
@@ -3416,6 +3541,7 @@ export default {
         env,
         url
       );
+
     }
 
 
@@ -3426,18 +3552,19 @@ export default {
       );
 
 
-    if (
-      rewritten
-    ) {
+    if (rewritten) {
+
       return env.ASSETS.fetch(
         rewritten
       );
+
     }
 
 
     return env.ASSETS.fetch(
       request
     );
+
   },
 
 
@@ -3459,6 +3586,7 @@ export default {
         env
       )
     );
-  },
+
+  }
 
 };
