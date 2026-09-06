@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="css/style.css">
 <style>
   .list-page{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
-  .list-page h1{font-family:var(--serif);fontnewze:clamp(24px,3vw,32px);margin:0 0 26px;}
+  .list-page h1{font-family:var(--serif);font-size:clamp(24px,3vw,32px);margin:0 0 26px;}
   .list-empty{color:var(--ink-soft);padding:40px 0;text-align:center;}
 </style>
 </head>
@@ -41,14 +41,19 @@
   }
 
   async function loadList() {
-    const type = new URLSearchParams(location.search).get("type") || "movie";
-    const titles = { review: "Movie Reviews", movie: "Movies", article: "Articles", trending: "Trending Now", featured: "Featured" };
-    document.getElementById("list-title").textContent = titles[type] || "Browse";
-    document.title = `${titles[type] || "Browse"} — TukTakMovies`;
+    const params = new URLSearchParams(location.search);
+    const type = params.get("type") || "movie";
+    const media = params.get("media"); // "movie" or "tv" — only meaningful when type=movie
+    const titles = { review: "Movie Reviews", article: "Articles", trending: "Trending Now", featured: "Featured" };
+    const title = media === "tv" ? "TV Shows" : (titles[type] || (type === "movie" ? "Movies" : "Browse"));
+    document.getElementById("list-title").textContent = title;
+    document.title = `${title} — TukTakMovies`;
 
     const grid = document.getElementById("list-grid");
     try {
-      const res = await fetch(`/api/posts?type=${type}&limit=100`);
+      const qs = new URLSearchParams({ type, limit: "100" });
+      if (media) qs.set("media", media);
+      const res = await fetch(`/api/posts?${qs.toString()}`);
       const data = res.ok ? await res.json() : { posts: [] };
       const posts = data.posts || [];
       if (!posts.length) {
@@ -56,7 +61,7 @@
         return;
       }
       grid.innerHTML = posts.map(p => `
-        <a class="card" href="/movie/${p.id}">
+        <a class="card" href="${p.media_type === "tv" ? "/tv/" : "/movie/"}${p.id}">
           ${thumbHtmlForList(p)}
           <div class="body">
             <h3>${p.title}</h3>
