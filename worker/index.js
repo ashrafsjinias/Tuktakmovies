@@ -75,19 +75,32 @@ function formatPostDate(d) {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
+// Best-effort "industry" label from TMDB's original_language code. This is
+// a simple heuristic (language ≠ nationality), but it's the same signal
+// most movie sites use for a quick Bollywood/Hollywood/South split.
+function industryFromLanguage(lang) {
+  if (lang === "hi") return "Bollywood";
+  if (["ta", "te", "ml", "kn"].includes(lang)) return "South Indian";
+  if (lang === "en") return "Hollywood";
+  return null;
+}
+
 // Fetches genres/runtime/tagline/backdrop/trailer/cast + watch-provider info
-// for one TMDB movie id. Used by both the fresh import and the backfill
-// (for movies that were imported before these fields existed).
-async function fetchTmdbExtras(env, tmdbId) {
+// for one TMDB item (movie or TV show). Used by fresh imports and the
+// backfill (for items that were imported before these fields existed).
+async function fetchTmdbExtras(env, tmdbId, mediaType = "movie") {
+  const base = mediaType === "tv" ? "tv" : "movie";
   let genres = null, runtime = null, tagline = null, backdropUrl = null, trailerKey = null, castNames = null;
   try {
     const detailRes = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${env.TMDB_API_KEY}&append_to_response=videos,credits`
+      `https://api.themoviedb.org/3/${base}/${tmdbId}?api_key=${env.TMDB_API_KEY}&append_to_response=videos,credits`
     );
     if (detailRes.ok) {
       const detail = await detailRes.json();
       genres = (detail.genres || []).map(g => g.name).join(", ") || null;
-      runtime = detail.runtime || null;
+      runtime = mediaType === "tv"
+        ? (Array.isArray(detail.episode_run_time) && detail.episode_run_time[0]) || null
+        : detail.runtime || null;
       tagline = detail.tagline || null;
       castNames = (detail.credits?.cast || []).slice(0, 5).map(c => c.name).join(", ") || null;
 
@@ -100,7 +113,7 @@ async function fetchTmdbExtras(env, tmdbId) {
         try {
           const backdropRes = await fetch(`https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`);
           if (backdropRes.ok) {
-            const bKey = `tmdb-${tmdbId}-backdrop.jpg`;
+            const bKey = `tmdb-${base}-${tmdbId}-backdrop.jpg`;
             await env.IMAGES.put(bKey, await backdropRes.arrayBuffer(), {
               httpMetadata: { contentType: backdropRes.headers.get("Content-Type") || "image/jpeg" },
             });
@@ -115,14 +128,14 @@ async function fetchTmdbExtras(env, tmdbId) {
     console.log("Detail fetch failed for", tmdbId, err);
   }
 
-  // Where to Watch — TMDB's watch/providers endpoint is movie-specific and
+  // Where to Watch — TMDB's watch/providers endpoint is item-specific and
   // region-aware (powered by JustWatch). We default to the US region; the
   // returned "link" already points at a page showing real availability,
   // so we never invent a generic Netflix/Prime link.
   let watchProviders = null, watchLink = null;
   try {
     const wRes = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}/watch/providers?api_key=${env.TMDB_API_KEY}`
+      `https://api.themoviedb.org/3/${base}/${tmdbId}/watch/providers?api_key=${env.TMDB_API_KEY}`
     );
     if (wRes.ok) {
       const wData = await wRes.json();
@@ -150,12 +163,12 @@ async function backfillTmdbDetails(env, limit = 10) {
   if (!env.TMDB_API_KEY || !env.DB) return { updated: 0 };
 
   const { results } = await env.DB.prepare(
-    "SELECT id, tmdb_id FROM posts WHERE tmdb_id IS NOT NULL AND (genres IS NULL OR genres = '') LIMIT ?"
+    "SELECT id, tmdb_id, media_type FROM posts WHERE tmdb_id IS NOT NULL AND (genres IS NULL OR genres = '') LIMIT ?"
   ).bind(limit).all();
 
   let updated = 0;
   for (const row of results) {
-    const extra = await fetchTmdbExtras(env, row.tmdb_id);
+    const extra = await fetchTmdbExtras(env, row.tmdb_id, row.media_type || "movie");
     await env.DB.prepare(
       "UPDATE posts SET genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=? WHERE id=?"
     ).bind(
@@ -169,24 +182,24 @@ async function backfillTmdbDetails(env, limit = 10) {
 
 // Reuses an already-uploaded poster for this tmdb_id when we have one,
 // otherwise downloads it from TMDB and stores it in R2.
-async function getOrUploadPoster(env, movie) {
+async function getOrUploadPoster(env, item, mediaType = "movie") {
   const existing = await env.DB.prepare(
-    "SELECT image FROM posts WHERE tmdb_id = ? AND image IS NOT NULL LIMIT 1"
-  ).bind(movie.id).first();
+    "SELECT image FROM posts WHERE tmdb_id = ? AND media_type = ? AND image IS NOT NULL LIMIT 1"
+  ).bind(item.id, mediaType).first();
   if (existing && existing.image) return existing.image;
 
-  if (!movie.poster_path || !env.IMAGES) return null;
+  if (!item.poster_path || !env.IMAGES) return null;
   try {
-    const posterRes = await fetch(`https://image.tmdb.org/t/p/w500${movie.poster_path}`);
+    const posterRes = await fetch(`https://image.tmdb.org/t/p/w500${item.poster_path}`);
     if (posterRes.ok) {
-      const key = `tmdb-${movie.id}.jpg`;
+      const key = `tmdb-${mediaType}-${item.id}.jpg`;
       await env.IMAGES.put(key, await posterRes.arrayBuffer(), {
         httpMetadata: { contentType: posterRes.headers.get("Content-Type") || "image/jpeg" },
       });
       return `/images/${key}`;
     }
   } catch (err) {
-    console.log("Poster fetch failed for", movie.id, err);
+    console.log("Poster fetch failed for", item.id, err);
   }
   return null;
 }
@@ -201,28 +214,29 @@ async function upsertFeaturedFromTop(env, movie, extra, imageUrl) {
   const postDate = formatPostDate(new Date());
   const link = `https://www.themoviedb.org/movie/${movie.id}`;
   const title = movie.title || movie.original_title || "Untitled";
+  const industry = industryFromLanguage(movie.original_language);
 
   const existing = await env.DB.prepare("SELECT id FROM posts WHERE type = 'featured' LIMIT 1").first();
 
   // NOTE: tmdb_id is intentionally left out here (not set to movie.id).
   // The same TMDB movie already has its own row in the "movie" grid with
-  // that tmdb_id, and tmdb_id must stay unique across all posts — so the
+  // that tmdb_id, and tmdb_id must stay unique per media type — so the
   // featured slot is matched by type='featured' instead, not by tmdb_id.
   if (existing) {
     await env.DB.prepare(
-      "UPDATE posts SET title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?, genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=? WHERE id=?"
+      "UPDATE posts SET title=?, excerpt=?, image=?, score=?, rating=?, year=?, post_date=?, comments=?, link=?, genres=?, runtime=?, tagline=?, backdrop=?, trailer_key=?, cast_names=?, watch_providers=?, watch_link=?, media_type='movie', industry=?, original_language=? WHERE id=?"
     ).bind(
       title, excerpt, imageUrl, rating, rating, year, postDate, 0, link,
       extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
-      extra.watchProviders, extra.watchLink, existing.id
+      extra.watchProviders, extra.watchLink, industry, movie.original_language || null, existing.id
     ).run();
   } else {
     await env.DB.prepare(
-      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES ('featured', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link, media_type, industry, original_language) VALUES ('featured', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'movie', ?, ?)"
     ).bind(
       title, excerpt, imageUrl, rating, rating, year, postDate, 0, link,
       extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
-      extra.watchProviders, extra.watchLink
+      extra.watchProviders, extra.watchLink, industry, movie.original_language || null
     ).run();
   }
 }
@@ -278,22 +292,23 @@ async function importTrendingFromTMDB(env) {
   for (const movie of movies) {
     if (imported >= TMDB_IMPORT_LIMIT) break;
 
-    const existing = await env.DB.prepare("SELECT id FROM posts WHERE tmdb_id = ?")
+    const existing = await env.DB.prepare("SELECT id FROM posts WHERE tmdb_id = ? AND media_type = 'movie'")
       .bind(movie.id)
       .first();
     if (existing) continue; // already imported before
 
-    const imageUrl = await getOrUploadPoster(env, movie);
+    const imageUrl = await getOrUploadPoster(env, movie, "movie");
 
     // Extra details (genres, runtime, tagline, backdrop, trailer, cast, watch info)
-    const extra = await fetchTmdbExtras(env, movie.id);
+    const extra = await fetchTmdbExtras(env, movie.id, "movie");
 
     const year = movie.release_date ? Number(movie.release_date.slice(0, 4)) : null;
     const rating = typeof movie.vote_average === "number" ? Math.round(movie.vote_average * 10) / 10 : null;
     const excerpt = (movie.overview || "").slice(0, 300);
+    const industry = industryFromLanguage(movie.original_language);
 
     await env.DB.prepare(
-      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link, media_type, industry, original_language) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'movie', ?, ?)"
     ).bind(
       TMDB_POST_TYPE,
       movie.title || movie.original_title || "Untitled",
@@ -307,7 +322,7 @@ async function importTrendingFromTMDB(env) {
       `https://www.themoviedb.org/movie/${movie.id}`,
       movie.id,
       extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
-      extra.watchProviders, extra.watchLink
+      extra.watchProviders, extra.watchLink, industry, movie.original_language || null
     ).run();
 
     imported++;
@@ -317,12 +332,94 @@ async function importTrendingFromTMDB(env) {
   // (falls back to the first candidate if that specific fetch failed above).
   const featuredPick = trendingTop || movies[0];
   if (featuredPick) {
-    const topImage = await getOrUploadPoster(env, featuredPick);
-    const topExtra = await fetchTmdbExtras(env, featuredPick.id);
+    const topImage = await getOrUploadPoster(env, featuredPick, "movie");
+    const topExtra = await fetchTmdbExtras(env, featuredPick.id, "movie");
     await upsertFeaturedFromTop(env, featuredPick, topExtra, topImage);
   }
 
   console.log(`TMDB import finished: ${imported} new post(s) added.`);
+}
+
+// ---------- TV Shows import ----------
+
+async function importTVFromTMDB(env) {
+  if (!env.TMDB_API_KEY) {
+    console.log("TMDB_API_KEY not set — skipping TV import.");
+    return;
+  }
+  if (!env.DB) {
+    console.log("D1 (DB) not bound — skipping TV import.");
+    return;
+  }
+
+  const SOURCE_ENDPOINTS = [
+    "https://api.themoviedb.org/3/trending/tv/day",
+    "https://api.themoviedb.org/3/trending/tv/week",
+    "https://api.themoviedb.org/3/tv/popular",
+    "https://api.themoviedb.org/3/tv/top_rated",
+  ];
+  const PAGES_PER_SOURCE = 2;
+
+  const candidateMap = new Map();
+  for (const base of SOURCE_ENDPOINTS) {
+    for (let page = 1; page <= PAGES_PER_SOURCE; page++) {
+      try {
+        const res = await fetch(`${base}?api_key=${env.TMDB_API_KEY}&page=${page}`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        (data.results || []).forEach(s => {
+          if (!candidateMap.has(s.id)) candidateMap.set(s.id, s);
+        });
+      } catch (err) {
+        console.log("TV candidate fetch failed:", base, page, err);
+      }
+    }
+  }
+  const shows = Array.from(candidateMap.values());
+  if (!shows.length) {
+    console.log("No candidate TV shows fetched from TMDB.");
+    return;
+  }
+
+  let imported = 0;
+  for (const show of shows) {
+    if (imported >= TMDB_IMPORT_LIMIT) break;
+
+    const existing = await env.DB.prepare("SELECT id FROM posts WHERE tmdb_id = ? AND media_type = 'tv'")
+      .bind(show.id)
+      .first();
+    if (existing) continue;
+
+    const imageUrl = await getOrUploadPoster(env, show, "tv");
+    const extra = await fetchTmdbExtras(env, show.id, "tv");
+
+    const year = show.first_air_date ? Number(show.first_air_date.slice(0, 4)) : null;
+    const rating = typeof show.vote_average === "number" ? Math.round(show.vote_average * 10) / 10 : null;
+    const excerpt = (show.overview || "").slice(0, 300);
+    const title = show.name || show.original_name || "Untitled";
+    const industry = industryFromLanguage(show.original_language);
+
+    await env.DB.prepare(
+      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link, media_type, industry, original_language) VALUES ('movie', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'tv', ?, ?)"
+    ).bind(
+      title,
+      excerpt,
+      imageUrl,
+      rating,
+      rating,
+      year,
+      formatPostDate(new Date()),
+      0,
+      `https://www.themoviedb.org/tv/${show.id}`,
+      show.id,
+      extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
+      extra.watchProviders, extra.watchLink, industry, show.original_language || null
+    ).run();
+
+    imported++;
+  }
+
+  console.log(`TMDB TV import finished: ${imported} new show(s) added.`);
 }
 
 // ---------- Clean URL routing ----------
@@ -331,10 +428,10 @@ async function importTrendingFromTMDB(env) {
 // while the existing list.html / about.html / etc. keep doing the work.
 
 const CLEAN_ROUTES = {
-  "/movies": "/list.html?type=movie",
+  "/movies": "/list.html?type=movie&media=movie",
   "/reviews": "/list.html?type=review",
   "/articles": "/list.html?type=article",
-  "/tv-shows": "/coming-soon.html?section=TV%20Shows",
+  "/tv-shows": "/list.html?type=movie&media=tv",
   "/celebrities": "/coming-soon.html?section=Celebrities",
   "/top-lists": "/coming-soon.html?section=Top%20Lists",
   "/explainers": "/coming-soon.html?section=Explainers",
@@ -365,9 +462,21 @@ function rewriteCleanUrl(request, url) {
     return new Request(target.toString(), request);
   }
 
+  const tvMatch = path.match(/^\/tv\/(\d+)$/);
+  if (tvMatch) {
+    const target = new URL(`/post.html?id=${tvMatch[1]}`, url.origin);
+    return new Request(target.toString(), request);
+  }
+
   const genreMatch = path.match(/^\/genre\/([a-zA-Z0-9-]+)$/);
   if (genreMatch) {
     const target = new URL(`/genre.html?slug=${genreMatch[1]}`, url.origin);
+    return new Request(target.toString(), request);
+  }
+
+  const industryMatch = path.match(/^\/industry\/([a-zA-Z0-9-]+)$/);
+  if (industryMatch) {
+    const target = new URL(`/industry.html?slug=${industryMatch[1]}`, url.origin);
     return new Request(target.toString(), request);
   }
 
@@ -441,6 +550,13 @@ async function handleApi(request, env, url) {
     return json({ ok: true });
   }
 
+  // -- manual trigger for TV shows sync (admin only) --
+  if (pathname === "/api/import-tmdb-tv" && request.method === "POST") {
+    if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
+    await importTVFromTMDB(env);
+    return json({ ok: true });
+  }
+
   // -- backfill missing movie details on old TMDB-imported posts (admin only) --
   if (pathname === "/api/backfill-tmdb" && request.method === "POST") {
     if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
@@ -481,16 +597,18 @@ async function handleApi(request, env, url) {
     if (!(await requireAuth(request, env))) return json({ error: "Unauthorized" }, { status: 401 });
     if (!env.TMDB_API_KEY) return json({ error: "TMDB_API_KEY isn't set." }, { status: 500 });
     const q = (url.searchParams.get("q") || "").trim();
+    const media = url.searchParams.get("media") === "tv" ? "tv" : "movie";
     if (!q) return json({ results: [] });
     const res = await fetch(
-      `https://api.themoviedb.org/3/search/movie?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(q)}`
+      `https://api.themoviedb.org/3/search/${media}?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(q)}`
     );
     if (!res.ok) return json({ error: "TMDB search failed." }, { status: 502 });
     const data = await res.json();
     const results = (data.results || []).slice(0, 12).map(m => ({
       tmdb_id: m.id,
-      title: m.title || m.original_title,
-      year: m.release_date ? m.release_date.slice(0, 4) : null,
+      media_type: media,
+      title: media === "tv" ? (m.name || m.original_name) : (m.title || m.original_title),
+      year: (media === "tv" ? m.first_air_date : m.release_date)?.slice(0, 4) || null,
       poster: m.poster_path ? `https://image.tmdb.org/t/p/w200${m.poster_path}` : null,
       rating: m.vote_average,
     }));
@@ -502,30 +620,34 @@ async function handleApi(request, env, url) {
     if (!env.TMDB_API_KEY) return json({ error: "TMDB_API_KEY isn't set." }, { status: 500 });
     const b = await request.json().catch(() => ({}));
     const tmdbId = Number(b.tmdb_id);
+    const media = b.media_type === "tv" ? "tv" : "movie";
     if (!tmdbId) return json({ error: "tmdb_id is required." }, { status: 400 });
 
-    const already = await env.DB.prepare("SELECT id FROM posts WHERE tmdb_id = ?").bind(tmdbId).first();
+    const already = await env.DB.prepare("SELECT id FROM posts WHERE tmdb_id = ? AND media_type = ?")
+      .bind(tmdbId, media).first();
     if (already) return json({ ok: true, alreadyImported: true, id: already.id });
 
-    const movieRes = await fetch(`https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${env.TMDB_API_KEY}`);
-    if (!movieRes.ok) return json({ error: "Could not fetch this movie from TMDB." }, { status: 502 });
-    const movie = await movieRes.json();
+    const itemRes = await fetch(`https://api.themoviedb.org/3/${media}/${tmdbId}?api_key=${env.TMDB_API_KEY}`);
+    if (!itemRes.ok) return json({ error: `Could not fetch this ${media} from TMDB.` }, { status: 502 });
+    const item = await itemRes.json();
 
-    const imageUrl = await getOrUploadPoster(env, movie);
-    const extra = await fetchTmdbExtras(env, tmdbId);
-    const year = movie.release_date ? Number(movie.release_date.slice(0, 4)) : null;
-    const rating = typeof movie.vote_average === "number" ? Math.round(movie.vote_average * 10) / 10 : null;
-    const excerpt = (movie.overview || "").slice(0, 300);
+    const imageUrl = await getOrUploadPoster(env, item, media);
+    const extra = await fetchTmdbExtras(env, tmdbId, media);
+    const dateField = media === "tv" ? item.first_air_date : item.release_date;
+    const year = dateField ? Number(dateField.slice(0, 4)) : null;
+    const rating = typeof item.vote_average === "number" ? Math.round(item.vote_average * 10) / 10 : null;
+    const excerpt = (item.overview || "").slice(0, 300);
+    const title = media === "tv" ? (item.name || item.original_name) : (item.title || item.original_title);
+    const industry = industryFromLanguage(item.original_language);
 
     const result = await env.DB.prepare(
-      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (type, title, excerpt, image, score, rating, year, post_date, comments, link, tmdb_id, genres, runtime, tagline, backdrop, trailer_key, cast_names, watch_providers, watch_link, media_type, industry, original_language) VALUES ('movie', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
-      TMDB_POST_TYPE,
-      movie.title || movie.original_title || "Untitled",
+      title || "Untitled",
       excerpt, imageUrl, rating, rating, year, formatPostDate(new Date()), 0,
-      `https://www.themoviedb.org/movie/${tmdbId}`, tmdbId,
+      `https://www.themoviedb.org/${media}/${tmdbId}`, tmdbId,
       extra.genres, extra.runtime, extra.tagline, extra.backdropUrl, extra.trailerKey, extra.castNames,
-      extra.watchProviders, extra.watchLink
+      extra.watchProviders, extra.watchLink, media, industry, item.original_language || null
     ).run();
 
     return json({ ok: true, id: result.meta.last_row_id });
@@ -534,17 +656,20 @@ async function handleApi(request, env, url) {
   // -- posts --
   if (pathname === "/api/posts" && request.method === "GET") {
     const type = url.searchParams.get("type");
+    const media = url.searchParams.get("media"); // "movie" or "tv" — disambiguates within type='movie'
     const sort = url.searchParams.get("sort"); // "rating" or default (newest first)
     const limit = Math.min(Number(url.searchParams.get("limit") || 50), 100);
     const orderBy = sort === "rating"
       ? "ORDER BY rating DESC, created_at DESC"
       : "ORDER BY created_at DESC, id DESC";
-    let stmt;
-    if (type) {
-      stmt = env.DB.prepare(`SELECT * FROM posts WHERE type = ? ${orderBy} LIMIT ?`).bind(type, limit);
-    } else {
-      stmt = env.DB.prepare(`SELECT * FROM posts ${orderBy} LIMIT ?`).bind(limit);
-    }
+
+    const conditions = [];
+    const params = [];
+    if (type) { conditions.push("type = ?"); params.push(type); }
+    if (media) { conditions.push("media_type = ?"); params.push(media); }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const stmt = env.DB.prepare(`SELECT * FROM posts ${where} ${orderBy} LIMIT ?`).bind(...params, limit);
     const { results } = await stmt.all();
     return json({ posts: results });
   }
@@ -627,5 +752,6 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(importTrendingFromTMDB(env));
+    ctx.waitUntil(importTVFromTMDB(env));
   },
 };
