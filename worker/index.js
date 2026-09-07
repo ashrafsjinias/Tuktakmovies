@@ -1,4 +1,4 @@
-```js
+
 // ---------- Fallback/demo content ----------
 // Used only if the API isn't reachable yet.
 
