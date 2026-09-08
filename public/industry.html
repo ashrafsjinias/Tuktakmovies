@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browse by Industry — TukTakMovies</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .list-page{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+  .list-page h1{font-family:var(--serif);font-size:clamp(24px,3vw,32px);margin:0 0 16px;}
+  .list-empty{color:var(--ink-soft);padding:40px 0;text-align:center;grid-column:1/-1;}
+  .pagination-controls{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:24px;}
+  .pagination-controls .page-btn{padding:9px 18px;border:1px solid var(--line);border-radius:7px;background:#fff;font-family:var(--sans);font-size:13.5px;font-weight:600;cursor:pointer;}
+  .pagination-controls .page-btn:disabled{opacity:.4;cursor:default;}
+  .pagination-controls .page-info{font-size:13.5px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="logo">
+      <span class="logo-mark">🎬</span>
+      <span class="logo-text">TUKTAK<strong>MOVIES</strong>
+        <small>MOVIE NEWS, REVIEWS &amp; MORE</small>
+      </span>
+    </a>
+  </div>
+</header>
+
+<main class="list-page">
+  <h1 id="industry-title">Browse by Industry</h1>
+  <div class="genre-tabs" id="industry-tabs"></div>
+  <div class="grid grid-4" id="industry-grid"></div>
+  <div id="industry-pagination" class="pagination-controls"></div>
+</main>
+
+<script src="js/pagination.js"></script>
+<script>
+  // slug = used in the URL (/industry/bollywood), label = shown to the
+  // person, match = the exact value stored in the posts.industry column
+  // (set at import time from TMDB's original_language).
+  const INDUSTRIES = [
+    { slug: "bollywood", label: "Bollywood", match: "Bollywood" },
+    { slug: "hollywood", label: "Hollywood", match: "Hollywood" },
+    { slug: "south",     label: "South Indian", match: "South Indian" },
+  ];
+
+  function thumbHtmlFor(post) {
+    const img = post.image
+      ? `<img src="${post.image}" alt="${post.title} poster" loading="lazy">`
+      : `<div class="no-image">${post.title}</div>`;
+    const score = post.score ?? post.rating;
+    const badge = score != null ? `<span class="score">${score}</span>` : "";
+    return `<div class="thumb">${img}${badge}</div>`;
+  }
+
+  let allItems = [];
+
+  function renderIndustry(industry) {
+    document.getElementById("industry-title").textContent = `${industry.label} Movies & Shows`;
+    document.title = `${industry.label} — TukTakMovies`;
+
+    const grid = document.getElementById("industry-grid");
+    const filtered = allItems.filter(m => m.industry === industry.match);
+
+    if (!filtered.length) {
+      document.getElementById("industry-pagination").innerHTML = "";
+      grid.innerHTML = `<p class="list-empty">No ${industry.label} titles yet — check back after the next TMDB sync.</p>`;
+      return;
+    }
+
+    function renderIndustryPage(pageItems) {
+      grid.innerHTML = pageItems.map(p => `
+          <a class="card" href="${p.media_type === "tv" ? "/tv/" : "/movie/"}${p.id}">
+            ${thumbHtmlFor(p)}
+            <div class="body">
+              <h3>${p.title}</h3>
+              <div class="sub">
+                <span>${p.year || ""}</span>
+                <span class="stars">⭐ ${p.rating ?? "—"}</span>
+              </div>
+            </div>
+          </a>`).join("");
+    }
+
+    paginate(filtered, { perPage: 12, containerId: "industry-pagination", onRender: renderIndustryPage });
+  }
+
+  function setActiveTab(slug) {
+    document.querySelectorAll("#industry-tabs button").forEach(b => {
+      b.classList.toggle("active", b.dataset.slug === slug);
+    });
+  }
+
+  async function init() {
+    const params = new URLSearchParams(location.search);
+    const requestedSlug = (params.get("slug") || "bollywood").toLowerCase();
+    const initial = INDUSTRIES.find(i => i.slug === requestedSlug) || INDUSTRIES[0];
+
+    const tabsEl = document.getElementById("industry-tabs");
+    tabsEl.innerHTML = INDUSTRIES.map(i =>
+      `<button type="button" data-slug="${i.slug}">${i.label}</button>`
+    ).join("");
+    tabsEl.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const industry = INDUSTRIES.find(i => i.slug === btn.dataset.slug);
+        history.pushState({}, "", `/industry/${industry.slug}`);
+        setActiveTab(industry.slug);
+        renderIndustry(industry);
+      });
+    });
+
+    try {
+      // Movies and TV shows are both stored under type='movie'; media_type
+      // tells them apart. We want both here, so we fetch without a media filter.
+      const res = await fetch("/api/posts?type=movie&limit=200");
+      const data = res.ok ? await res.json() : { posts: [] };
+      allItems = data.posts || [];
+    } catch {
+      allItems = [];
+    }
+
+    setActiveTab(initial.slug);
+    renderIndustry(initial);
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
