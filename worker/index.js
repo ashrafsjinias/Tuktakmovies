@@ -83,7 +83,8 @@ function industryFromLanguage(lang) {
   if (["ta", "te", "ml", "kn"].includes(lang)) return "South Indian";
   if (lang === "en") return "Hollywood";
   if (lang === "ko") return "Korean";
-    if (lang === "ja") return "Japanese";
+  if (lang === "ja") return "Japanese";
+  if (lang === "bn") return "Bengali";
   return null;
 }
 
