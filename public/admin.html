@@ -30,7 +30,6 @@
     <a href="/" class="logo"><span class="logo-mark">🎬</span><span class="logo-text">TUKTAK<strong>MOVIES</strong><small>ADMIN</small></span></a>
     <div style="display:flex;gap:8px;">
       <button id="sync-tmdb-btn" class="btn btn-ghost">Sync from TMDB now</button>
-      <button id="sync-tv-btn" class="btn btn-ghost">Sync TV Shows now</button>
       <button id="backfill-btn" class="btn btn-ghost">Backfill old movie details</button>
       <button id="logout-btn" class="btn btn-ghost">Log Out</button>
     </div>
@@ -39,17 +38,9 @@
 
   <main class="admin-main">
     <section class="admin-card">
-      <h2>Search TMDB &amp; Import a Specific Title</h2>
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <label style="display:flex;align-items:center;gap:5px;font-weight:600;font-size:13.5px;">
-          <input type="radio" name="tmdb-media" value="movie" checked> Movie
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;font-weight:600;font-size:13.5px;">
-          <input type="radio" name="tmdb-media" value="tv"> TV Show
-        </label>
-      </div>
+      <h2>Search TMDB &amp; Import a Specific Movie</h2>
       <form id="tmdb-search-form" style="display:flex;gap:8px;margin-bottom:14px;">
-        <input type="text" id="tmdb-search-input" placeholder="Search title…" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:7px;">
+        <input type="text" id="tmdb-search-input" placeholder="Search movie title…" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:7px;">
         <button type="submit" class="btn btn-primary">Search</button>
       </form>
       <p class="muted" id="tmdb-search-status"></p>
