@@ -83,6 +83,8 @@ function industryFromLanguage(lang) {
   if (["ta", "te", "ml", "kn"].includes(lang)) return "South Indian";
   if (lang === "en") return "Hollywood";
   return null;
+  if (lang === "bn") return "Bengali";
+  return null;
 }
 
 // Fetches genres/runtime/tagline/backdrop/trailer/cast + watch-provider info
