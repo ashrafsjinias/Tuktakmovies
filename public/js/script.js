@@ -191,6 +191,8 @@ const INDUSTRY_TABS = [
   { label: "Bollywood", match: "Bollywood" },
   { label: "Hollywood", match: "Hollywood" },
   { label: "South Indian", match: "South Indian" },
+  { label: "Korean", match: "Korean" },
+  { label: "Japanese", match: "Japanese" },
 ];
 let allItemsForIndustry = [];
 
