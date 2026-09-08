@@ -193,6 +193,7 @@ const INDUSTRY_TABS = [
   { label: "South Indian", match: "South Indian" },
   { label: "Korean", match: "Korean" },
   { label: "Japanese", match: "Japanese" },
+  { label: "Bengali", match: "Bengali" },
 ];
 let allItemsForIndustry = [];
 
