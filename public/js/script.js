@@ -127,7 +127,10 @@ async function renderHero() {
       <span>📅 ${post.post_date || ""}</span>
       <span>💬 ${post.comments || 0} Comments</span>
       <span class="rating-inline">⭐ ${post.rating ?? "—"}/10</span>`;
-    document.querySelector("#hero-content .btn").href = post.link || "#";
+        const heroHref = post.id
+      ? (post.media_type === "tv" ? `/tv/${post.id}` : `/movie/${post.id}`)
+      : (post.link || "#");
+    document.querySelector("#hero-content .btn").href = heroHref;
     if (post.image) {
       const media = document.getElementById("hero-media");
       media.style.backgroundImage = `url('${post.image}')`;
