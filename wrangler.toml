@@ -1,4 +1,4 @@
-name = "divine-wind-102e"
+name = "tuktakmovies"
 main = "worker/index.js"
 compatibility_date = "2026-01-01"
 
