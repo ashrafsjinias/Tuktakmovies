@@ -658,7 +658,7 @@ async function handleApi(request, env, url) {
     const type = url.searchParams.get("type");
     const media = url.searchParams.get("media"); // "movie" or "tv" — disambiguates within type='movie'
     const sort = url.searchParams.get("sort"); // "rating" or default (newest first)
-    const limit = Math.min(Number(url.searchParams.get("limit") || 50), 100);
+    const limit = Math.min(Number(url.searchParams.get("limit") || 1000000), 100000);
     const orderBy = sort === "rating"
       ? "ORDER BY rating DESC, created_at DESC"
       : "ORDER BY created_at DESC, id DESC";
