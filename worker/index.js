@@ -425,20 +425,377 @@ async function importTVFromTMDB(env) {
   console.log(`TMDB TV import finished: ${imported} new show(s) added.`);
 }
 
+
+// ---------- SEO / server-rendering helpers ----------
+
+const SITE_NAME = "TukTakMovies";
+const DEFAULT_DESCRIPTION =
+  "TukTakMovies — movie discovery, reviews, TV shows, movie news and where to watch.";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeJsonLd(value) {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+function slugify(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90) || "untitled";
+}
+
+function publicPostPath(post) {
+  const prefix = post.media_type === "tv" ? "/tv/" : "/movie/";
+  return `${prefix}${post.id}-${slugify(post.title)}`;
+}
+
+function absoluteUrl(origin, path) {
+  return new URL(path, origin).toString();
+}
+
+function cleanMetaDescription(post) {
+  const base = post.excerpt || post.tagline ||
+    `${post.title || "Movie"}${post.year ? ` (${post.year})` : ""} — discover details, cast, rating, genres and where to watch on TukTakMovies.`;
+  return String(base).replace(/\s+/g, " ").trim().slice(0, 160);
+}
+
+function listMeta(type, media, page) {
+  let title = "Browse";
+  let description = DEFAULT_DESCRIPTION;
+  if (media === "tv") {
+    title = "TV Shows";
+    description = "Discover TV shows, ratings, genres, cast information and where to watch on TukTakMovies.";
+  } else if (type === "movie") {
+    title = "Movies";
+    description = "Discover movies, ratings, genres, cast information, reviews and where to watch on TukTakMovies.";
+  } else if (type === "review") {
+    title = "Movie Reviews";
+    description = "Read movie reviews, ratings and movie details on TukTakMovies.";
+  } else if (type === "article") {
+    title = "Articles";
+    description = "Explore movie news, explainers, lists and entertainment articles on TukTakMovies.";
+  } else if (type === "trending") {
+    title = "Trending Now";
+    description = "See movies and entertainment titles trending on TukTakMovies.";
+  } else if (type === "featured") {
+    title = "Featured";
+    description = "Explore featured movie and entertainment content on TukTakMovies.";
+  }
+  return {
+    title: page > 1 ? `${title} — Page ${page} | ${SITE_NAME}` : `${title} | ${SITE_NAME}`,
+    description,
+  };
+}
+
+function addSeoHead(documentHtml, { title, description, canonical, image, jsonLd, robots = "index,follow" }) {
+  let out = documentHtml.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
+  const metas = `
+<meta name="description" content="${escapeHtml(description)}">
+<meta name="robots" content="${escapeHtml(robots)}">
+<link rel="canonical" href="${escapeHtml(canonical)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${SITE_NAME}">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:url" content="${escapeHtml(canonical)}">
+${image ? `<meta property="og:image" content="${escapeHtml(image)}">` : ""}
+<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}">
+<meta name="twitter:title" content="${escapeHtml(title)}">
+<meta name="twitter:description" content="${escapeHtml(description)}">
+${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">` : ""}
+<script type="application/ld+json">${escapeJsonLd(jsonLd)}</script>`;
+  out = out.replace(/<\/head>/i, `${metas}\n</head>`);
+  return out;
+}
+
+async function getPostsPage(env, { type, media, page = 1, limit = 12, sort }) {
+  page = Math.max(1, Number(page) || 1);
+  limit = Math.min(48, Math.max(1, Number(limit) || 12));
+
+  const conditions = [];
+  const params = [];
+  if (type) { conditions.push("type = ?"); params.push(type); }
+  if (media) { conditions.push("media_type = ?"); params.push(media); }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const orderBy = sort === "rating"
+    ? "ORDER BY rating DESC, created_at DESC, id DESC"
+    : "ORDER BY created_at DESC, id DESC";
+
+  const countRow = await env.DB.prepare(
+    `SELECT COUNT(*) AS total FROM posts ${where}`
+  ).bind(...params).first();
+
+  const total = Number(countRow?.total || 0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  if (page > totalPages && total > 0) page = totalPages;
+
+  const offset = (page - 1) * limit;
+  const { results } = await env.DB.prepare(
+    `SELECT * FROM posts ${where} ${orderBy} LIMIT ? OFFSET ?`
+  ).bind(...params, limit, offset).all();
+
+  return { posts: results || [], page, limit, total, totalPages };
+}
+
+function listPathFor(type, media, page) {
+  let path = "/movies";
+  if (media === "tv") path = "/tv-shows";
+  else if (type === "review") path = "/reviews";
+  else if (type === "article") path = "/articles";
+  else if (type === "trending") path = "/trending";
+  else if (type === "featured") path = "/featured";
+  return page > 1 ? `${path}?page=${page}` : path;
+}
+
+function renderListCards(posts, origin) {
+  return posts.map(post => {
+    const href = publicPostPath(post);
+    const image = post.image || post.backdrop;
+    const img = image
+      ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(post.title)} poster" loading="lazy" decoding="async">`
+      : `<div class="no-image">${escapeHtml(post.title)}</div>`;
+    const score = post.score ?? post.rating;
+    const badge = score != null ? `<span class="score">${escapeHtml(score)}</span>` : "";
+    return `<a class="card" href="${escapeHtml(href)}">
+      <div class="thumb">${img}${badge}</div>
+      <div class="body">
+        <h3>${escapeHtml(post.title)}</h3>
+        <div class="sub">
+          <span>${escapeHtml(post.post_date || post.year || "")}</span>
+          ${post.comments ? `<span>💬 ${escapeHtml(post.comments)}</span>` : ""}
+        </div>
+      </div>
+    </a>`;
+  }).join("");
+}
+
+function renderPaginationLinks(type, media, page, totalPages) {
+  if (totalPages <= 1) return "";
+  const prev = page > 1
+    ? `<a class="page-btn page-prev" href="${escapeHtml(listPathFor(type, media, page - 1))}">← Prev</a>`
+    : `<span class="page-btn page-prev" aria-disabled="true" style="opacity:.4;cursor:default;">← Prev</span>`;
+  const next = page < totalPages
+    ? `<a class="page-btn page-next" href="${escapeHtml(listPathFor(type, media, page + 1))}">Next →</a>`
+    : `<span class="page-btn page-next" aria-disabled="true" style="opacity:.4;cursor:default;">Next →</span>`;
+  return `${prev}<span class="page-info">Page ${page} of ${totalPages}</span>${next}`;
+}
+
+async function renderListHtml(request, env, url, type, media) {
+  const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+  const sort = url.searchParams.get("sort") || undefined;
+  const data = await getPostsPage(env, { type, media, page, limit: 12, sort });
+  const asset = await env.ASSETS.fetch(new Request(new URL("/list.html", url.origin), request));
+  if (!asset.ok) return asset;
+
+  let html = await asset.text();
+  const meta = listMeta(type, media, data.page);
+  const canonicalPath = listPathFor(type, media, data.page);
+  const canonical = absoluteUrl(url.origin, canonicalPath);
+
+  const displayTitle = media === "tv" ? "TV Shows" :
+    type === "review" ? "Movie Reviews" :
+    type === "article" ? "Articles" :
+    type === "trending" ? "Trending Now" :
+    type === "featured" ? "Featured" : "Movies";
+
+  html = html.replace(/<main class="list-page">/i, `<main class="list-page" data-ssr="true">`);
+  html = html.replace(/<h1 id="list-title">[\s\S]*?<\/h1>/i, `<h1 id="list-title">${escapeHtml(displayTitle)}</h1>`);
+  html = html.replace(/<div class="grid grid-4" id="list-grid"><\/div>/i,
+    `<div class="grid grid-4" id="list-grid">${data.posts.length ? renderListCards(data.posts, url.origin) : `<p class="list-empty">No posts here yet.</p>`}</div>`);
+  html = html.replace(/<div id="list-pagination" class="pagination-controls"><\/div>/i,
+    `<div id="list-pagination" class="pagination-controls">${renderPaginationLinks(type, media, data.page, data.totalPages)}</div>`);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": meta.title,
+    "description": meta.description,
+    "url": canonical,
+    "isPartOf": { "@type": "WebSite", "name": SITE_NAME, "url": url.origin },
+    "mainEntity": {
+      "@type": "ItemList",
+      "numberOfItems": data.total,
+      "itemListElement": data.posts.map((p, i) => ({
+        "@type": "ListItem",
+        "position": i + 1,
+        "url": absoluteUrl(url.origin, publicPostPath(p)),
+        "name": p.title
+      }))
+    }
+  };
+
+  html = addSeoHead(html, {
+    title: meta.title,
+    description: meta.description,
+    canonical,
+    jsonLd
+  });
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=UTF-8",
+      "Cache-Control": "public, max-age=60, s-maxage=300"
+    }
+  });
+}
+
+function renderPostMain(post, origin) {
+  const metaParts = [];
+  if (post.post_date) metaParts.push(`<span>📅 ${escapeHtml(post.post_date)}</span>`);
+  if (post.year) metaParts.push(`<span>${escapeHtml(post.year)}</span>`);
+  if (post.runtime) {
+    const h = Math.floor(post.runtime / 60), m = post.runtime % 60;
+    metaParts.push(`<span>${h ? `${h}h ${m}m` : `${m}m`}</span>`);
+  }
+  if (post.comments) metaParts.push(`<span>💬 ${escapeHtml(post.comments)} Comments</span>`);
+  const rating = post.rating ?? post.score;
+  if (rating != null) metaParts.push(`<span class="stars">⭐ ${escapeHtml(rating)}</span>`);
+
+  const genres = (post.genres || "").split(",").map(g => g.trim()).filter(Boolean)
+    .map(g => `<span>${escapeHtml(g)}</span>`).join("");
+  const hero = post.backdrop || post.image;
+  const watchProviders = (post.watch_providers || "").split(",").map(p => p.trim()).filter(Boolean);
+  const watch = watchProviders.length || post.watch_link
+    ? `<div class="watch-section"><h3>Where to Watch</h3>
+      ${watchProviders.length ? `<div class="watch-pills">${watchProviders.map(name =>
+        `<a href="${escapeHtml(post.watch_link || "#")}" target="_blank" rel="noopener">${escapeHtml(name)}</a>`).join("")}</div>` : ""}
+      <p class="watch-note">Availability may vary by region and change over time.
+      ${post.watch_link ? `<a href="${escapeHtml(post.watch_link)}" target="_blank" rel="noopener">Check current availability →</a>` : ""}</p></div>`
+    : `<div class="watch-section"><h3>Where to Watch</h3><p class="watch-note">Streaming availability isn't listed for this title yet.</p></div>`;
+
+  return `<a href="/" class="back-link">← Back to home</a>
+    ${hero ? `<img class="post-hero-img" src="${escapeHtml(hero)}" alt="${escapeHtml(post.title)}" loading="eager" decoding="async">` : ""}
+    <h1>${escapeHtml(post.title)}</h1>
+    ${post.tagline ? `<p class="tagline">${escapeHtml(post.tagline)}</p>` : ""}
+    <div class="post-meta">${metaParts.join("")}</div>
+    ${genres ? `<div class="genre-pills">${genres}</div>` : ""}
+    ${post.trailer_key ? `<div class="trailer-wrap"><iframe src="https://www.youtube.com/embed/${encodeURIComponent(post.trailer_key)}" title="${escapeHtml(post.title)} trailer" allowfullscreen loading="lazy"></iframe></div>` : ""}
+    ${post.excerpt ? `<p class="post-excerpt">${escapeHtml(post.excerpt)}</p>` : ""}
+    ${post.cast_names ? `<p class="cast-line"><strong>Starring:</strong> ${escapeHtml(post.cast_names)}</p>` : ""}
+    ${watch}`;
+}
+
+async function renderPostHtml(request, env, url, id, mediaType) {
+  const post = await env.DB.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first();
+  if (!post || (mediaType && post.media_type !== mediaType)) {
+    return new Response("Not Found", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=UTF-8" }
+    });
+  }
+
+  const asset = await env.ASSETS.fetch(new Request(new URL("/post.html", url.origin), request));
+  if (!asset.ok) return asset;
+  let html = await asset.text();
+
+  const canonical = absoluteUrl(url.origin, publicPostPath(post));
+  const titleType = post.media_type === "tv" ? "TV Show" : "Movie";
+  const title = `${post.title}${post.year ? ` (${post.year})` : ""} — ${titleType} Details & Where to Watch | ${SITE_NAME}`;
+  const description = cleanMetaDescription(post);
+  const image = post.backdrop || post.image || null;
+
+  html = html.replace(/<main class="post-detail" id="post-detail">[\s\S]*?<\/main>/i,
+    `<main class="post-detail" id="post-detail" data-ssr="true">${renderPostMain(post, url.origin)}</main>`);
+  html = addSeoHead(html, {
+    title,
+    description,
+    canonical,
+    image: image ? absoluteUrl(url.origin, image) : null,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": post.media_type === "tv" ? "TVSeries" : "Movie",
+      "name": post.title,
+      "description": description,
+      "url": canonical,
+      ...(image ? { "image": [absoluteUrl(url.origin, image)] } : {}),
+      ...(post.year ? { "dateCreated": `${post.year}-01-01` } : {}),
+      ...(post.genres ? { "genre": post.genres.split(",").map(g => g.trim()).filter(Boolean) } : {}),
+      ...(post.cast_names ? { "actor": post.cast_names.split(",").map(n => ({ "@type": "Person", "name": n.trim() })).filter(a => a.name) } : {}),
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": url.origin },
+          { "@type": "ListItem", "position": 2, "name": titleType === "TV Show" ? "TV Shows" : "Movies", "item": absoluteUrl(url.origin, titleType === "TV Show" ? "/tv-shows" : "/movies") },
+          { "@type": "ListItem", "position": 3, "name": post.title, "item": canonical }
+        ]
+      }
+    }
+  });
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=UTF-8",
+      "Cache-Control": "public, max-age=60, s-maxage=300"
+    }
+  });
+}
+
+async function renderRobots(origin) {
+  return new Response(
+`User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Sitemap: ${origin}/sitemap.xml
+`, { headers: { "Content-Type": "text/plain; charset=UTF-8" } });
+}
+
+async function renderSitemap(env, origin) {
+  const urls = new Set([
+    `${origin}/`,
+    `${origin}/movies`,
+    `${origin}/tv-shows`,
+    `${origin}/reviews`,
+    `${origin}/articles`
+  ]);
+
+  const { results } = await env.DB.prepare(
+    "SELECT id, title, media_type, type FROM posts ORDER BY id ASC"
+  ).all();
+
+  for (const post of results || []) {
+    if (!post.title) continue;
+    if (post.media_type === "tv") urls.add(`${origin}${publicPostPath(post)}`);
+    else if (post.type === "movie" || post.type === "review" || post.type === "featured") {
+      urls.add(`${origin}${publicPostPath(post)}`);
+    } else if (post.type === "article") {
+      urls.add(`${origin}${publicPostPath(post)}`);
+    }
+  }
+
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${Array.from(urls).map(u => `<url><loc>${escapeHtml(u)}</loc></url>`).join("\n")}
+</urlset>`;
+
+  return new Response(body, {
+    headers: {
+      "Content-Type": "application/xml; charset=UTF-8",
+      "Cache-Control": "public, max-age=300"
+    }
+  });
+}
+
+
 // ---------- Clean URL routing ----------
-// Maps pretty paths to the existing static files/pages. No new pages are
-// created here — this only lets the browser show a clean URL (e.g. /movies)
-// while the existing list.html / about.html / etc. keep doing the work.
+// Public routes are rendered with real D1 data so important content is present
+// in the initial HTML response instead of requiring a browser-only API fetch.
 
 const CLEAN_ROUTES = {
-  "/movies": "/list.html?type=movie&media=movie",
-  "/reviews": "/list.html?type=review",
-  "/articles": "/list.html?type=article",
-  "/tv-shows": "/list.html?type=movie&media=tv",
-  "/celebrities": "/coming-soon.html?section=Celebrities",
-  "/top-lists": "/coming-soon.html?section=Top%20Lists",
-  "/explainers": "/coming-soon.html?section=Explainers",
-  "/industry-news": "/coming-soon.html?section=Industry%20News",
   "/about": "/about.html",
   "/contact": "/contact.html",
   "/write-for-us": "/write-for-us.html",
@@ -459,34 +816,33 @@ function rewriteCleanUrl(request, url) {
     return new Request(target.toString(), request);
   }
 
-  const movieMatch = path.match(/^\/movie\/(\d+)$/);
-  if (movieMatch) {
-    const target = new URL(`/post.html?id=${movieMatch[1]}`, url.origin);
-    return new Request(target.toString(), request);
-  }
-
-  const tvMatch = path.match(/^\/tv\/(\d+)$/);
-  if (tvMatch) {
-    const target = new URL(`/post.html?id=${tvMatch[1]}`, url.origin);
-    return new Request(target.toString(), request);
-  }
-
-  const genreMatch = path.match(/^\/genre\/([a-zA-Z0-9-]+)$/);
-  if (genreMatch) {
-    const target = new URL(`/genre.html?slug=${genreMatch[1]}`, url.origin);
-    return new Request(target.toString(), request);
-  }
-
-  const industryMatch = path.match(/^\/industry\/([a-zA-Z0-9-]+)$/);
-  if (industryMatch) {
-    const target = new URL(`/industry.html?slug=${industryMatch[1]}`, url.origin);
-    return new Request(target.toString(), request);
-  }
-
   return null;
 }
 
-// ---------- API ----------
+async function handlePublicHtml(request, env, url) {
+  const path = url.pathname.length > 1 ? url.pathname.replace(/\/$/, "") : url.pathname;
+
+  if (path === "/robots.txt") return renderRobots(url.origin);
+  if (path === "/sitemap.xml") return renderSitemap(env, url.origin);
+
+  if (path === "/movies") return renderListHtml(request, env, url, "movie", "movie");
+  if (path === "/tv-shows") return renderListHtml(request, env, url, "movie", "tv");
+  if (path === "/reviews") return renderListHtml(request, env, url, "review", null);
+  if (path === "/articles") return renderListHtml(request, env, url, "article", null);
+  if (path === "/trending") return renderListHtml(request, env, url, "trending", null);
+  if (path === "/featured") return renderListHtml(request, env, url, "featured", null);
+
+  // Preferred canonical form: /movie/123-title-slug or /tv/123-title-slug.
+  // The numeric ID keeps this backward-compatible without requiring a DB schema migration.
+  let match = path.match(/^\/movie\/(\d+)(?:-[a-z0-9-]+)?$/i);
+  if (match) return renderPostHtml(request, env, url, Number(match[1]), "movie");
+
+  match = path.match(/^\/tv\/(\d+)(?:-[a-z0-9-]+)?$/i);
+  if (match) return renderPostHtml(request, env, url, Number(match[1]), "tv");
+
+  // Legacy ID-only URLs continue to work.
+  return null;
+}
 
 async function handleApi(request, env, url) {
   const { pathname } = url;
@@ -659,22 +1015,22 @@ async function handleApi(request, env, url) {
   // -- posts --
   if (pathname === "/api/posts" && request.method === "GET") {
     const type = url.searchParams.get("type");
-    const media = url.searchParams.get("media"); // "movie" or "tv" — disambiguates within type='movie'
-    const sort = url.searchParams.get("sort"); // "rating" or default (newest first)
-    const limit = Math.min(Number(url.searchParams.get("limit") || 50), 100);
-    const orderBy = sort === "rating"
-      ? "ORDER BY rating DESC, created_at DESC"
-      : "ORDER BY created_at DESC, id DESC";
+    const media = url.searchParams.get("media");
+    const sort = url.searchParams.get("sort");
+    const requestedLimit = Number(url.searchParams.get("limit") || 50);
+    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 50, 1), 48);
+    const page = Math.max(1, Number(url.searchParams.get("page") || 1));
 
-    const conditions = [];
-    const params = [];
-    if (type) { conditions.push("type = ?"); params.push(type); }
-    if (media) { conditions.push("media_type = ?"); params.push(media); }
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-
-    const stmt = env.DB.prepare(`SELECT * FROM posts ${where} ${orderBy} LIMIT ?`).bind(...params, limit);
-    const { results } = await stmt.all();
-    return json({ posts: results });
+    const data = await getPostsPage(env, { type, media, page, limit, sort });
+    return json({
+      posts: data.posts,
+      page: data.page,
+      limit: data.limit,
+      total: data.total,
+      totalPages: data.totalPages,
+      hasNext: data.page < data.totalPages,
+      hasPrev: data.page > 1
+    });
   }
 
   if (pathname === "/api/posts" && request.method === "POST") {
@@ -738,16 +1094,30 @@ async function handleApi(request, env, url) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
     if (url.pathname.startsWith("/api/")) {
       try {
         return await handleApi(request, env, url);
       } catch (err) {
+        console.error("API error:", err);
         return json({ error: String(err) }, { status: 500 });
       }
     }
+
     if (url.pathname.startsWith("/images/")) {
       return handleImage(request, env, url);
     }
+
+    // Server-render important public pages for crawlability.
+    try {
+      const rendered = await handlePublicHtml(request, env, url);
+      if (rendered) return rendered;
+    } catch (err) {
+      console.error("Public render error:", err);
+      // Fall through to the existing static asset behavior rather than taking
+      // the whole site down if a render fails.
+    }
+
     const rewritten = rewriteCleanUrl(request, url);
     if (rewritten) return env.ASSETS.fetch(rewritten);
     return env.ASSETS.fetch(request);
