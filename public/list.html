@@ -59,7 +59,7 @@
 
     const grid = document.getElementById("list-grid");
     try {
-      const qs = new URLSearchParams({ type, limit: "100" });
+      const qs = new URLSearchParams({ type, limit: "1000000" });
       if (media) qs.set("media", media);
       const res = await fetch(`/api/posts?${qs.toString()}`);
       const data = res.ok ? await res.json() : { posts: [] };
