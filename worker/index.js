@@ -421,7 +421,44 @@ async function importTVFromTMDB(env) {
 
   console.log(`TMDB TV import finished: ${imported} new show(s) added.`);
 }
+// ---------- Dynamic Sitemap ----------
 
+async function handleSitemap(env, url) {
+  const { results } = await env.DB.prepare(
+    `SELECT id, media_type FROM posts
+     WHERE media_type IN ('movie', 'tv')
+     ORDER BY id DESC`
+  ).all();
+
+  const urls = [
+    `${url.origin}/`,
+    `${url.origin}/movies`,
+    `${url.origin}/reviews`,
+    `${url.origin}/tv-shows`,
+    `${url.origin}/articles`,
+  ];
+
+  for (const post of results) {
+    const path =
+      post.media_type === "tv"
+        ? `/tv/${post.id}`
+        : `/movie/${post.id}`;
+
+    urls.push(`${url.origin}${path}`);
+  }
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((loc) => `<url><loc>${loc}</loc></url>`).join("\n")}
+</urlset>`;
+
+  return new Response(xml, {
+    headers: {
+      "Content-Type": "application/xml; charset=UTF-8",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
 // ---------- Clean URL routing ----------
 // Maps pretty paths to the existing static files/pages. No new pages are
 // created here — this only lets the browser show a clean URL (e.g. /movies)
@@ -742,6 +779,13 @@ export default {
         return json({ error: String(err) }, { status: 500 });
       }
     }
+    if (url.pathname === "/sitemap.xml") {
+  try {
+    return await handleSitemap(env, url);
+  } catch (error) {
+    return new Response("Sitemap error", { status: 500 });
+  }
+}
     if (url.pathname.startsWith("/images/")) {
       return handleImage(request, env, url);
     }
