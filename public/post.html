@@ -137,6 +137,40 @@ if (metaDescription) {
       : `Discover ${post.title}, including reviews, rating, cast, trailer and where to watch.`
   );
 }
+      const oldSchema = document.getElementById("movie-schema");
+if (oldSchema) oldSchema.remove();
+
+const movieSchema = document.createElement("script");
+movieSchema.type = "application/ld+json";
+movieSchema.id = "movie-schema";
+
+const schemaData = {
+  "@context": "https://schema.org",
+  "@type": "Movie",
+  "name": post.title,
+  "url": `${location.origin}/movie/${post.id}`,
+  ...(post.backdrop || post.image
+    ? { "image": post.backdrop || post.image }
+    : {}),
+  ...(post.excerpt
+    ? { "description": post.excerpt }
+    : {}),
+  ...(post.year
+    ? { "dateCreated": `${post.year}-01-01` }
+    : {}),
+  ...(post.rating ?? post.score
+    ? {
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": Number(post.rating ?? post.score),
+          "bestRating": 10
+        }
+      }
+    : {})
+};
+
+movieSchema.textContent = JSON.stringify(schemaData);
+document.head.appendChild(movieSchema);
       const metaParts = [];
       if (post.post_date) metaParts.push(`📅 ${post.post_date}`);
       if (post.year) metaParts.push(post.year);
