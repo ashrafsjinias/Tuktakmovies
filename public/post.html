@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Loading… — TukTakMovies</title>
+  <meta name="description" content="Discover movies, reviews, ratings, cast, trailers and where to watch on TukTakMovies.">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <style>
@@ -127,7 +128,15 @@
       const { post } = await res.json();
 
       document.title = `${post.title} — TukTakMovies`;
-
+const metaDescription = document.querySelector('meta[name="description"]');
+if (metaDescription) {
+  metaDescription.setAttribute(
+    "content",
+    post.excerpt
+      ? `${post.title} — ${post.excerpt}`.slice(0, 160)
+      : `Discover ${post.title}, including reviews, rating, cast, trailer and where to watch.`
+  );
+}
       const metaParts = [];
       if (post.post_date) metaParts.push(`📅 ${post.post_date}`);
       if (post.year) metaParts.push(post.year);
