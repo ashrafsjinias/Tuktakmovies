@@ -161,10 +161,11 @@ const schemaData = {
   ...(post.rating ?? post.score
     ? {
         "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": Number(post.rating ?? post.score),
-          "bestRating": 10
-        }
+  "@type": "AggregateRating",
+  "ratingValue": Number(post.rating ?? post.score),
+  "bestRating": 10,
+  "ratingCount": 1
+}
       }
     : {})
 };
