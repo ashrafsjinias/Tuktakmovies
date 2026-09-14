@@ -169,7 +169,40 @@ const schemaData = {
       }
     : {})
 };
+const oldBreadcrumb = document.getElementById("breadcrumb-schema");
+if (oldBreadcrumb) oldBreadcrumb.remove();
 
+const breadcrumbSchema = document.createElement("script");
+breadcrumbSchema.type = "application/ld+json";
+breadcrumbSchema.id = "breadcrumb-schema";
+
+const breadcrumbData = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": `${location.origin}/`
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": post.media_type === "tv" ? "TV Shows" : "Movies",
+      "item": `${location.origin}/${post.media_type === "tv" ? "tv-shows" : "movies"}`
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": post.title,
+      "item": location.href
+    }
+  ]
+};
+
+breadcrumbSchema.textContent = JSON.stringify(breadcrumbData);
+document.head.appendChild(breadcrumbSchema);
 movieSchema.textContent = JSON.stringify(schemaData);
 document.head.appendChild(movieSchema);
       const metaParts = [];
