@@ -1,0 +1,21 @@
+{
+  "name": "tuktakmovies",
+  "version": "1.0.0",
+  "description": "TuktakMovies - Movie Review & Discovery Platform",
+  "main": "src/worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --env production",
+    "db:create": "wrangler d1 create tuktakmovies-db",
+    "db:migrate": "wrangler d1 execute tuktakmovies-db --file=migrations/001_initial.sql",
+    "db:migrate:prod": "wrangler d1 execute tuktakmovies-db --env production --file=migrations/001_initial.sql",
+    "kv:create": "wrangler kv:namespace create CACHE",
+    "r2:create": "wrangler r2 bucket create tuktakmovies-media",
+    "types": "wrangler types"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
