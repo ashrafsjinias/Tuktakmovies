@@ -13,7 +13,7 @@ database_id = "ade7eb5a-c953-4a11-a3a1-71e4057137d8"
 
 [[kv_namespaces]]
 binding = "CACHE"
-id = "64055e4571114aac8257ed07a0392b99"
+id = "044bb5ad2f464ed8ac68c5d22bc983d8"
 
 [[r2_buckets]]
 binding = "MEDIA"
