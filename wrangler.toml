@@ -9,7 +9,7 @@ bucket = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "tuktakmovies-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "80b5691d-41da-457a-8f87-3ad8ca60c830"
 
 [[kv_namespaces]]
 binding = "CACHE"
