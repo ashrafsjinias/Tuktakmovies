@@ -47,6 +47,19 @@ async function handleRequest(request, env, ctx) {
     return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': url.origin, 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400' } });
   }
 
+  // Serve static assets (CSS, JS, images, favicon, etc.) through Cloudflare Workers Assets.
+  // This must run before database/session/page handling so asset requests are not treated as HTML routes.
+  if (env.ASSETS && (pathname.startsWith('/css/') || pathname.startsWith('/js/') || pathname.startsWith('/images/') || pathname === '/favicon.ico' || pathname === '/manifest.json')) {
+    const assetResponse = await env.ASSETS.fetch(request);
+    if (assetResponse.status !== 404) {
+      const headers = new Headers(assetResponse.headers);
+      for (const [k, v] of Object.entries(securityHeaders)) headers.set(k, v);
+      if (pathname.startsWith('/css/')) headers.set('Content-Type', 'text/css; charset=utf-8');
+      else if (pathname.startsWith('/js/')) headers.set('Content-Type', 'application/javascript; charset=utf-8');
+      return new Response(assetResponse.body, { status: assetResponse.status, headers });
+    }
+  }
+
   // Maintenance mode
   if (env.DB) {
     try {
